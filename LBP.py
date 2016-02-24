@@ -170,11 +170,6 @@ class FactorNode():
             self.graph.messages[str(self), str(var)] = new_m
 
 
-class ObservedFactor(FactorNode):
-    def __init__(self, id, ):
-        FactorNode.__init__(self, id, )
-
-
 class Message():
     def __init__(self, m):
         assert isinstance(m, np.ndarray)
