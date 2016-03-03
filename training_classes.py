@@ -3,6 +3,7 @@ import enchant
 from editdistance import EditDistance
 
 spell = enchant.request_dict("en_US")
+spell_german = enchant.request_pwl_dict('training_instances.txt.random.de')
 ed = EditDistance(None)
 
 
@@ -51,8 +52,7 @@ class Guess(dict):
         else:
             if spell.check(guess):
                 self.guess = guess
-            elif float(ed.editdistance_simple(guess.lower(), l2_word.lower())[0] / float(
-                    max(len(guess), len(l2_word)))) <= 0.2:
+            elif l2_word in spell_german.suggest(guess) or l2_word == guess:
                 self.guess = '__COPY__'
             else:
                 suggest = spell.suggest(guess)
