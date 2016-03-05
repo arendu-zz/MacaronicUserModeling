@@ -1,6 +1,7 @@
 __author__ = 'arenduchintala'
 import numpy as np
 from numpy import float32 as DTYPE
+import pdb
 
 global VAR_TYPE_LATENT, VAR_TYPE_PREDICTED, VAR_TYPE_GIVEN, UNARY_FACTOR, BINARY_FACTOR
 VAR_TYPE_PREDICTED = 'var_type_predicted'
@@ -11,12 +12,17 @@ BINARY_FACTOR = 'binary_factor'
 
 
 class FactorGraph():
-    def __init__(self):
+    def __init__(self, theta_en_en, theta_en_de, phi_en_en, phi_en_de):
+        self.theta_en_en = theta_en_en
+        self.theta_en_de = theta_en_de
+        self.phi_en_en = phi_en_en
+        self.phi_en_de = phi_en_de
         self.variables = []
         self.factors = []
         self.messages = {}
         self.normalize_messages = True
         self.isLoopy = None
+        self.regularization_param = 0.1
 
     def add_factor(self, fac):
         assert fac not in self.factors
@@ -130,29 +136,34 @@ class FactorGraph():
                 self.factors[fi - 1].update_message_to(self.variables[vi - 1])
                 self.variables[vi - 1].update_message_to(self.factors[fii - 1])
 
-    def get_cell_gradient(self):
-        accumulate_cell_gradient = {}
+    def get_gradient(self):
+        grad_en_de = np.zeros_like(self.theta_en_de)
+        grad_en_en = np.zeros_like(self.theta_en_en)
         for f in self.factors:
-            # print 'Fac', f.id
-            a = accumulate_cell_gradient.get(f.factor_type, None)
-            if a is not None:
-                accumulate_cell_gradient[f.factor_type] = a + f.cell_gradient()
+            if f.factor_type == 'en_en':
+                grad_en_en += f.get_gradient()
+            elif f.factor_type == 'en_de':
+                grad_en_de += f.get_gradient()
             else:
-                accumulate_cell_gradient[f.factor_type] = f.cell_gradient()
-        return accumulate_cell_gradient
+                raise BaseException('only 2 kinds of factors allowed...')
+        reg_en_de = self.regularization_param * self.theta_en_de
+        reg_en_en = self.regularization_param * self.theta_en_en
+        grad_en_en -= reg_en_en
+        grad_en_de -= reg_en_de
+        return grad_en_de, grad_en_en
 
 
 class VariableNode():
-    def __init__(self, id, var_type, domain_type, domain, observed):
+    def __init__(self, id, var_type, domain_type, domain, supervised_label):
         assert isinstance(id, int)
-        assert observed in domain
+        assert supervised_label in domain
         self.id = id
         self.var_type = var_type
         self.domain = domain
         self.facset = []  # set of neighboring factors
         self.graph = None
-        self.observed = observed
-        self.observed_index = self.domain.index(observed)
+        self.supervised_label = supervised_label
+        self.supervised_label_index = self.domain.index(supervised_label)
         self.domain_type = domain_type
 
     def __str__(self):
@@ -198,7 +209,7 @@ class VariableNode():
 
 
 class FactorNode():
-    def __init__(self, id, factor_type=None, observed_domain_type=None, observed_value=None):
+    def __init__(self, id, factor_type=None, observed_domain_type=None, observed_value=None, observed_domain_size=None):
         assert isinstance(id, int)
         self.id = id
         self.varset = []  # set of neighboring variables
@@ -207,6 +218,7 @@ class FactorNode():
         self.graph = None
         self.observed_domain_type = observed_domain_type
         self.observed_value = observed_value
+        self.observed_domain_size = observed_domain_size
 
     def __str__(self):
         return 'F_' + str(self.id)
@@ -228,7 +240,32 @@ class FactorNode():
             assert v not in self.varset
             self.varset.append(v)
             v.add_factor(self)
+        ptable.add_factor(self)
         self.potential_table = ptable
+
+    def get_theta(self):
+        if self.factor_type == 'en_en':
+            return self.graph.theta_en_en
+        elif self.factor_type == 'en_de':
+            return self.graph.theta_en_de
+        else:
+            raise BaseException("only 2 factor types are supported right now..")
+
+    def get_phi(self):
+        if self.factor_type == 'en_en':
+            return self.graph.phi_en_en
+        elif self.factor_type == 'en_de':
+            return self.graph.phi_en_de
+        else:
+            raise BaseException("only 2 feature value types are supported right now..")
+
+    def get_shape(self):
+        if len(self.varset) == 1:
+            return len(self.varset[0].domain), self.observed_domain_size
+        elif len(self.varset) == 2:
+            return len(self.varset[0].domain), len(self.varset[1].domain)
+        else:
+            raise BaseException("only unary or binary factors are supported...")
 
     def update_message_to(self, var):
         other_vars = [v for v in self.varset if v.id != var.id]
@@ -280,10 +317,30 @@ class FactorNode():
 
     def get_observed_factor(self):
         of = np.zeros_like(self.potential_table.table)
-        cell = sorted([(self.potential_table.var_id2dim[v.id], v.observed_index) for v in self.varset])
+        cell = sorted([(self.potential_table.var_id2dim[v.id], v.supervised_label_index) for v in self.varset])
         cell = tuple([o for d, o in cell])
         of[cell] = 1.0
         return of
+
+    def get_on_the_fly_feature_values(self):
+        raise NotImplementedError("the matrix with feature values that are computed on the fly goes here...")
+
+    def get_gradient(self):
+        g = self.cell_gradient()
+        if self.factor_type == 'en_de':
+            sparse_g = np.zeros(self.get_shape())
+            g = np.reshape(g, (np.size(g),))
+            sparse_g[:, self.potential_table.observed_dim] = g
+            g = sparse_g
+        else:
+            # g is already  a matrix
+            pass
+        f_ij = np.reshape(g, (np.size(g), 1))
+        grad1 = f_ij.T.dot(self.get_phi())
+        '''on_the_fly_feature_values = self.get_on_the_fly_feature_values()
+        grad2 = on_the_fly_feature_values * f_ij
+        fg = np.concatenate((grad1, grad2), axis=1)'''
+        return grad1
 
     def cell_gradient(self):
         obs = self.get_observed_factor()
@@ -291,16 +348,6 @@ class FactorNode():
         exp = marginal
         g = obs - exp
         return g
-        '''vt_vd = sorted([(v.domain_type, self.potential_table.var_id2dim[v.id]) for v in self.varset])
-        vds = [d for vt, d in vt_vd]
-        if len(self.varset) == 1:
-            return g
-        else:
-            if vds == [0, 1]:
-                return np.reshape(g, (np.size(g), 1), 'c')
-            else:
-                return np.reshape(g, (np.size(g), 1), 'f')
-        '''
 
 
 class ObservedFactor(FactorNode):
@@ -332,13 +379,49 @@ class Message():
 
 
 class PotentialTable():
-    def __init__(self, v_id2dim, table):
-        assert isinstance(table, np.ndarray)
-        if len(np.shape(table)) > 1:
-            assert np.shape(table)[0] == np.shape(table)[1] or np.shape(table)[1] == 1
+    def __init__(self, v_id2dim, table=None, observed_dim=None):
+        self.factor = None
+        self.observed_dim = observed_dim
         self.var_id2dim = v_id2dim
+
+        if table is not None:
+            assert isinstance(table, np.ndarray)
+            if observed_dim is not None:
+                assert len(v_id2dim) == 1
+                if v_id2dim[v_id2dim.keys()[0]] == 0:
+                    self.table = np.reshape(table[:, observed_dim], (np.shape(table)[0], 1))
+                    self.var_id2dim = v_id2dim
+                else:
+                    raise NotImplementedError("a unary factor should always be a column vector")
+            else:
+                self.var_id2dim = v_id2dim
+                self.table = table
+            self.table.astype(DTYPE)
+            if len(np.shape(self.table)) > 1:
+                assert np.shape(self.table)[0] == np.shape(self.table)[1] or np.shape(self.table)[1] == 1
+        else:
+            pass
+
+    def make_potentials(self):
+        # table = np.exp(np.multiply(self.factor.get_theta(), self.factor.get_phi()))
+        # table = np.sum(table, 1)
+        table = self.factor.get_phi().dot(self.factor.get_theta().T)
+        table = np.exp(table)
+        table_shape = self.factor.get_shape()
+        table = np.reshape(table, table_shape)
+        if self.observed_dim is not None:
+            table = np.reshape(table[:, self.observed_dim], (np.shape(table)[0], 1))
+        else:
+            pass
         self.table = table
         self.table.astype(DTYPE)
+        if len(np.shape(self.table)) > 1:
+            assert np.shape(self.table)[0] == np.shape(self.table)[1] or np.shape(self.table)[1] == 1
+
+    def add_factor(self, factor):
+        assert isinstance(factor, FactorNode)
+        assert self.factor is None
+        self.factor = factor
 
 
 def pointwise_multiply(m1, m2):
