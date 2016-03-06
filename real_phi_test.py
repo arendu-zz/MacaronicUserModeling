@@ -1,7 +1,6 @@
 __author__ = 'arenduchintala'
 import itertools
 import sys
-# sys.path.insert(0, '/Users/arenduchintala/Projects2/MacaronicWebApp/python-scripts/')
 from training_classes import TrainingInstance, Guess, SimpleNode
 import json
 import numpy as np
@@ -115,7 +114,8 @@ if __name__ == '__main__':
     opt.add_option('--phi_ed', dest='phi_ed', default='')
     opt.add_option('--phi_ped', dest='phi_ped', default='')
     (options, _) = opt.parse_args()
-    if options.training_instances == '' or options.en_domain == '' or options.de_domain == '' or options.phi_wiji == '' or options.phi_ed == '' or options.phi_ped == '':
+
+    if options.training_instances == '' or options.en_domain == '' or options.de_domain == '' or options.phi_wiwj == '' or options.phi_ed == '' or options.phi_ped == '':
         sys.stderr.write(
             'Usage: python real_phi_test.py\n\
             --ti [training instance file]\n \
@@ -127,7 +127,9 @@ if __name__ == '__main__':
         exit(1)
     else:
         pass
-    training_instances = codecs.open(options.training_instaces).readlines()
+    print 'reading in  ti and domains...'
+
+    training_instances = codecs.open(options.training_instances).readlines()
     de_domain = [i.strip() for i in codecs.open(options.de_domain, 'r', 'utf8').readlines()]
     en_domain = [i.strip() for i in codecs.open(options.en_domain, 'r', 'utf8').readlines()]
     en2id = dict((e, idx) for idx, e in enumerate(en_domain))
@@ -135,24 +137,31 @@ if __name__ == '__main__':
     print len(en_domain), len(de_domain)
     # en_domain = ['en_' + str(i) for i in range(500)]
     # de_domain = ['de_' + str(i) for i in range(100)]
-
+    print 'read ti and domains...'
     f_en_en = ['f1']
 
     f_en_en_theta = np.ones((1, len(f_en_en)))
-    phi_en_en = np.loadtxt(options.phi_wiji)
+    print 'reading phi wiwj'
+    phi_en_en = np.loadtxt(options.phi_wiwj)
     phi_en_en = np.reshape(phi_en_en, (len(en_domain) * len(en_domain), len(f_en_en)))
     # phi_en_en = np.random.rand(len(en_domain) * len(en_domain), len(f_en_en))
     # phi_en_en[phi_en_en > 0.8] = 1.0
     # phi_en_en[phi_en_en < 1.0] = 0.0
     # pre_fire_en_en = sparse.csr_matrix(pre_fire_en_en)
 
-    f_en_de = ['x', 'y']
+    f_en_de = ['x', 'y', 'dummy']
     f_en_de_theta = np.ones((1, len(f_en_de)))
+    print 'reading phi ed'
     phi_en_de1 = np.loadtxt(options.phi_ed)
     phi_en_de1 = np.reshape(phi_en_de1, (len(en_domain) * len(de_domain), 1))
+
+    print 'reading phi ped'
     phi_en_de2 = np.loadtxt(options.phi_ped)
     phi_en_de2 = np.reshape(phi_en_de2, (len(en_domain) * len(de_domain), 1))
-    phi_en_de = np.concatenate((phi_en_de1, phi_en_de2), axis=1)
+    ss = np.shape(phi_en_de2)
+    phi_en_de3 = np.random.rand(ss[0], ss[1])
+    
+    phi_en_de = np.concatenate((phi_en_de1, phi_en_de2, phi_en_de3), axis=1)
 
     # phi_en_de = np.random.rand(len(en_domain) * len(de_domain), len(f_en_de))
     # phi_en_de = np.random.rand(len(en_domain) * len(de_domain), len(f_en_de))
@@ -161,7 +170,7 @@ if __name__ == '__main__':
     # pre_fire_en_de = sparse.csr_matrix(pre_fire_en_de)
 
 
-    print timeit.timeit()
+    st = timeit.timeit()
     for t_idx, training_instance in enumerate(training_instances):
         j_ti = json.loads(training_instance)
         ti = TrainingInstance.from_dict(j_ti)
@@ -180,9 +189,10 @@ if __name__ == '__main__':
         #    print np.reshape(m.m, (np.size(m.m),))
         fg.treelike_inference(3)
         grad_en_de, grad_en_en = fg.get_gradient()
-        fg.theta_en_en += 0.1 * grad_en_en
-        fg.theta_en_de += 0.1 * grad_en_de
+        fg.theta_en_en -= 0.1 * grad_en_en
+        fg.theta_en_de -= 0.1 * grad_en_de
         f_en_en_theta = fg.theta_en_en
         f_en_de_theta = fg.theta_en_de
         print f_en_de_theta
         print f_en_en_theta
+    print timeit.timeit() - st  , 'time taken'        
