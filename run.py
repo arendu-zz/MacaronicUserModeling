@@ -31,7 +31,7 @@ if __name__ == '__main__':
     for i in range(n):
         v = VariableNode(id=i, var_type=VAR_TYPE_PREDICTED, domain_type=None,
                          domain=["outcome_" + str(int(i + 1)) for i in range(k)],
-                         observed="outcome_" + str(int(i + 1)))
+                         supervised_label="outcome_" + str(int(i + 1)))
         variables_nodes.append(v)
 
     factor_nodes = []
@@ -59,6 +59,6 @@ if __name__ == '__main__':
     fg.treelike_inference(3)
     # fg.hw_inf(10)
     for v in fg.variables:
-        m = v.get_marginal()
+        m = v.get_factor_beliefs()
         print 'Var:', v.id, np.reshape(m.m, (np.size(m.m),))
     print 'has loops?', fg.isLoopy

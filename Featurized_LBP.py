@@ -8,7 +8,7 @@ np.seterr(all='raise')
 np.set_printoptions(precision=4, suppress=True)
 if __name__ == '__main__':
     fg = FactorGraph()
-    en_domain = ['en_' + str(i) for i in range(1000)]
+    en_domain = ['en_' + str(i) for i in range(300)]
     de_domain = ['de_' + str(i) for i in range(100)]
     f_labels = ['en_same', 'en_odd', 'en_even', 'de_odd', 'de_even']
     en_en_features = {}
@@ -41,7 +41,7 @@ if __name__ == '__main__':
         v = VariableNode(id=i, var_type=VAR_TYPE_PREDICTED,
                          domain_type='en',
                          domain=en_domain,
-                         observed=en_domain[np.random.randint(0, 100)])
+                         supervised_label=en_domain[np.random.randint(0, 100)])
         variables.append(v)
     factors = []
     for v1 in variables:
@@ -65,12 +65,12 @@ if __name__ == '__main__':
     for f in factors:
         fg.add_factor(f)
 
-    #print en_de_pot
-    #print en_en_pot
+    # print en_de_pot
+    # print en_en_pot
     fg.initialize()
     print fg.isLoopy
     for v in fg.variables:
-        m = v.get_marginal()
+        m = v.get_factor_beliefs()
         print np.reshape(m.m, (np.size(m.m),))
     fg.treelike_inference(3)
     cg = fg.get_cell_gradient()
@@ -92,5 +92,5 @@ if __name__ == '__main__':
             f.potential_table.table = en_de_pot
     fg.treelike_inference(3)
     for v in fg.variables:
-        m = v.get_marginal()
+        m = v.get_factor_beliefs()
         print np.reshape(m.m, (np.size(m.m),))

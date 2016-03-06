@@ -2,6 +2,7 @@ __author__ = 'arenduchintala'
 import numpy as np
 from numpy import float32 as DTYPE
 import pdb
+import random
 
 global VAR_TYPE_LATENT, VAR_TYPE_PREDICTED, VAR_TYPE_GIVEN, UNARY_FACTOR, BINARY_FACTOR
 VAR_TYPE_PREDICTED = 'var_type_predicted'
@@ -17,7 +18,7 @@ class FactorGraph():
         self.theta_en_de = theta_en_de
         self.phi_en_en = phi_en_en
         self.phi_en_de = phi_en_de
-        self.variables = []
+        self.variables = {}
         self.factors = []
         self.messages = {}
         self.normalize_messages = True
@@ -29,8 +30,9 @@ class FactorGraph():
         self.factors.append(fac)
         fac.graph = self
         for v in fac.varset:
-            if v not in self.variables:
-                self.variables.append(v)
+            if v.id not in self.variables:
+                # self.variables.append(v)
+                self.variables[v.id] = v
                 v.graph = self
 
     def get_message_schedule(self, root):
@@ -54,7 +56,9 @@ class FactorGraph():
 
     def has_loops(self):
         _seen = []
-        _stack = [(self.variables[0], None)]
+        _rand_key = random.sample(self.variables.keys(), 1)[0]
+        _root = self.variables[_rand_key]
+        _stack = [(_root, None)]
         while len(_stack) > 0:
             _n, _nparent = _stack.pop()
             if str(_n) in _seen:
@@ -69,10 +73,12 @@ class FactorGraph():
         return False
 
     def initialize(self):
+        assert len(self.variables) > 0
+        assert len(self.factors) > 0
         fs = sorted([(f.id, f) for f in self.factors])
         self.factors = [f for fid, f in fs]
-        vs = sorted([(v.id, v) for v in self.variables])
-        self.variables = [v for vid, v in vs]
+        vs = sorted([(v.id, v) for v in self.variables.values()])
+        # self.variables = [v for vid, v in vs]
         self.isLoopy = self.has_loops()
 
         for f in self.factors:
@@ -96,7 +102,8 @@ class FactorGraph():
         iterations = iterations if self.isLoopy else 1
         for _ in range(iterations):
             print 'iteration', _
-            _root = self.variables[np.random.randint(0, len(self.variables))]
+            _rand_key = random.sample(self.variables.keys(), 1)[0]
+            _root = self.variables[_rand_key]
             _schedule = self.get_message_schedule(_root)
             print 'leaves to root...', str(_root)
             for frm, to in reversed(_schedule):
@@ -114,6 +121,7 @@ class FactorGraph():
                     frm.update_message_to(to)
 
     def hw_inf(self, iterations):
+        raise BaseException("This method assumes self.variables is a list.. depricated...")
         n = len(self.variables)
         for fu in self.factors[:n]:
             fu.update_message_to(fu.varset[0])
@@ -233,9 +241,12 @@ class FactorNode():
 
     def add_varset_with_potentials(self, varset, ptable):
         assert isinstance(ptable, PotentialTable)
+        if len(varset) == 2:
+            assert varset[0] != varset[1]
         assert len(varset) == len(ptable.var_id2dim)
         if len(varset) > 2:
             raise NotImplementedError("Currently supporting unary and pairwise factors...")
+
         for v in varset:
             assert v not in self.varset
             self.varset.append(v)
@@ -289,16 +300,16 @@ class FactorNode():
             assert np.shape(new_m.m) == np.shape(self.graph.messages[str(self), str(var)].m)
             self.graph.messages[str(self), str(var)] = new_m
 
-    def get_marginal(self):
+    def get_factor_beliefs(self):
         # takes the last messages coming into this factor
         # normalizes the messages
-        # multiplies it into a matrix with same dim as the potnetials
+        # multiplies it into a matrix with same dim as the potentials
         r = None
         c = None
         if len(self.varset) == 1:
             m = Message.new_message(self.varset[0].domain, 1.0)
             m.renormalize()
-            marginal = m.m
+            marignals = m.m
         else:
             for v in self.varset:
                 vd = self.potential_table.var_id2dim[v.id]
@@ -310,10 +321,10 @@ class FactorNode():
                     r = np.reshape(m.m, (1, np.size(m.m)))  # row vector
                 else:
                     raise NotImplementedError("only supports pairwise factors..")
-            marginal = np.dot(c, r)
-        marginal = np.multiply(marginal, self.potential_table.table)
-        marginal = marginal / np.sum(marginal)
-        return marginal
+            marignals = np.dot(c, r)
+        beliefs = np.multiply(marignals, self.potential_table.table)
+        beliefs = beliefs / np.sum(beliefs)
+        return beliefs
 
     def get_observed_factor(self):
         of = np.zeros_like(self.potential_table.table)
@@ -327,7 +338,7 @@ class FactorNode():
 
     def get_gradient(self):
         g = self.cell_gradient()
-        if self.factor_type == 'en_de':
+        if self.potential_table.observed_dim is not None:
             sparse_g = np.zeros(self.get_shape())
             g = np.reshape(g, (np.size(g),))
             sparse_g[:, self.potential_table.observed_dim] = g
@@ -344,7 +355,7 @@ class FactorNode():
 
     def cell_gradient(self):
         obs = self.get_observed_factor()
-        marginal = self.get_marginal()  # this is the same because I assume binary features  values at the "cell level"
+        marginal = self.get_factor_beliefs()  # this is the same because I assume binary features  values at the "cell level"
         exp = marginal
         g = obs - exp
         return g
