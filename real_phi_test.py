@@ -115,8 +115,18 @@ if __name__ == '__main__':
     opt.add_option('--phi_ed', dest='phi_ed', default='')
     opt.add_option('--phi_ped', dest='phi_ped', default='')
     (options, _) = opt.parse_args()
-    print options
-    pass
+    if options.training_instances == '' or options.en_domain == '' or options.de_domain == '' or options.phi_wiji == '' or options.phi_ed == '' or options.phi_ped == '':
+        sys.stderr.write(
+            'Usage: python real_phi_test.py\n\
+            --ti [training instance file]\n \
+            --end [en domain file]\n \
+            --ded [de domain file]\n \
+            --phi_wiwj [wiwj file]\n \
+            --phi_ed [ed file]\n \
+            --phi_ped [ped file]\n')
+        exit(1)
+    else:
+        pass
     training_instances = codecs.open(options.training_instaces).readlines()
     de_domain = [i.strip() for i in codecs.open(options.de_domain, 'r', 'utf8').readlines()]
     en_domain = [i.strip() for i in codecs.open(options.en_domain, 'r', 'utf8').readlines()]
