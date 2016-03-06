@@ -5,7 +5,9 @@ import sys
 from training_classes import TrainingInstance, Guess, SimpleNode
 import json
 import numpy as np
-from scipy import sparse
+import sys
+import codecs
+from optparse import OptionParser
 from LBP import FactorNode, FactorGraph, VariableNode, VAR_TYPE_PREDICTED, PotentialTable, VAR_TYPE_GIVEN
 import timeit
 import codecs
@@ -104,28 +106,48 @@ def load_fg(fg, ti, en_domain, de2id, en2id):
 
 
 if __name__ == '__main__':
-    training_instances = codecs.open('mturk-data/t.random.200').readlines()
-    de_domain = [i.strip() for i in codecs.open('mturk-data/o.random.200.vocab.de', 'r', 'utf8').readlines()]
-    en_domain = [i.strip() for i in codecs.open('mturk-data/o.random.200.vocab.en.lower', 'r', 'utf8').readlines()]
+    opt = OptionParser()
+    # insert options here
+    opt.add_option('--ti', dest='training_instances', default='')
+    opt.add_option('--end', dest='en_domain', default='')
+    opt.add_option('--ded', dest='de_domain', default='')
+    opt.add_option('--phi_wiwj', dest='phi_wiwj', default='')
+    opt.add_option('--phi_ed', dest='phi_ed', default='')
+    opt.add_option('--phi_ped', dest='phi_ped', default='')
+    (options, _) = opt.parse_args()
+    print options
+    pass
+    training_instances = codecs.open(options.training_instaces).readlines()
+    de_domain = [i.strip() for i in codecs.open(options.de_domain, 'r', 'utf8').readlines()]
+    en_domain = [i.strip() for i in codecs.open(options.en_domain, 'r', 'utf8').readlines()]
     en2id = dict((e, idx) for idx, e in enumerate(en_domain))
     de2id = dict((d, idx) for idx, d in enumerate(de_domain))
     print len(en_domain), len(de_domain)
     # en_domain = ['en_' + str(i) for i in range(500)]
     # de_domain = ['de_' + str(i) for i in range(100)]
 
-    f_en_en = ['f1', 'f2']
+    f_en_en = ['f1']
 
     f_en_en_theta = np.ones((1, len(f_en_en)))
-    phi_en_en = np.random.rand(len(en_domain) * len(en_domain), len(f_en_en))
-    phi_en_en[phi_en_en > 0.8] = 1.0
-    phi_en_en[phi_en_en < 1.0] = 0.0
+    phi_en_en = np.loadtxt(options.phi_wiji)
+    phi_en_en = np.reshape(phi_en_en, (len(en_domain) * len(en_domain), len(f_en_en)))
+    # phi_en_en = np.random.rand(len(en_domain) * len(en_domain), len(f_en_en))
+    # phi_en_en[phi_en_en > 0.8] = 1.0
+    # phi_en_en[phi_en_en < 1.0] = 0.0
     # pre_fire_en_en = sparse.csr_matrix(pre_fire_en_en)
 
     f_en_de = ['x', 'y']
     f_en_de_theta = np.ones((1, len(f_en_de)))
-    phi_en_de = np.random.rand(len(en_domain) * len(de_domain), len(f_en_de))
-    phi_en_de[phi_en_de > 0.5] = 1.0
-    phi_en_de[phi_en_de < 0.2] = 0.0
+    phi_en_de1 = np.loadtxt(options.phi_ed)
+    phi_en_de1 = np.reshape(phi_en_de1, (len(en_domain) * len(de_domain), 1))
+    phi_en_de2 = np.loadtxt(options.phi_ped)
+    phi_en_de2 = np.reshape(phi_en_de2, (len(en_domain) * len(de_domain), 1))
+    phi_en_de = np.concatenate((phi_en_de1, phi_en_de2), axis=1)
+
+    # phi_en_de = np.random.rand(len(en_domain) * len(de_domain), len(f_en_de))
+    # phi_en_de = np.random.rand(len(en_domain) * len(de_domain), len(f_en_de))
+    # phi_en_de[phi_en_de > 0.5] = 1.0
+    # phi_en_de[phi_en_de < 0.2] = 0.0
     # pre_fire_en_de = sparse.csr_matrix(pre_fire_en_de)
 
 
