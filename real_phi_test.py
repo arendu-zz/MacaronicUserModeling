@@ -1,20 +1,22 @@
 __author__ = 'arenduchintala'
-import itertools
 import pdb
 import random
 from training_classes import TrainingInstance, Guess, SimpleNode
 import json
 import numpy as np
 import sys
-import codecs
 from optparse import OptionParser
 from LBP import FactorNode, FactorGraph, VariableNode, VAR_TYPE_PREDICTED, PotentialTable, VAR_TYPE_GIVEN
 import time
 import codecs
+from numpy import float32 as DTYPE
 
 np.seterr(divide='raise', over='raise', under='ignore')
 
 np.set_printoptions(precision=4, suppress=True)
+
+global make_phi_sparse
+make_phi_sparse = True
 
 
 def find_guess(simplenode_id, guess_list):
@@ -62,6 +64,7 @@ def load_fg(fg, ti, en_domain, de2id, en2id):
     len_de_domain = len(de_domain)
 
     history_feature = np.zeros((len_en_domain, len_de_domain))
+    history_feature.astype(DTYPE)
     for pg in ti.past_correct_guesses:
         i = en2id[pg.guess]
         j = de2id[pg.l2_word]
@@ -113,6 +116,7 @@ def load_fg(fg, ti, en_domain, de2id, en2id):
 
 
 if __name__ == '__main__':
+    global make_phi_sparse
     opt = OptionParser()
     # insert options here
     opt.add_option('--ti', dest='training_instances', default='')
@@ -152,10 +156,15 @@ if __name__ == '__main__':
     f_en_en_theta = np.zeros((1, len(f_en_en)))
     print 'reading phi wiwj'
     phi_en_en1 = np.loadtxt(options.phi_wiwj)
+    if make_phi_sparse:
+        phi_en_en1[phi_en_en1 < 1.0 / len(en_domain)] = 0.0  # make sparse...
     phi_en_en1 = np.reshape(phi_en_en1, (len(en_domain) * len(en_domain), 1))
     ss = np.shape(phi_en_en1)
     phi_en_en2 = np.random.rand(ss[0], ss[1])
+    if make_phi_sparse:
+        phi_en_en2[phi_en_en2 < 0.5] = 0
     phi_en_en = np.concatenate((phi_en_en1, phi_en_en2), axis=1)
+    phi_en_en.astype(DTYPE)
     # phi_en_en = np.random.rand(len(en_domain) * len(en_domain), len(f_en_en))
     # phi_en_en[phi_en_en > 0.8] = 1.0
     # phi_en_en[phi_en_en < 1.0] = 0.0
@@ -166,27 +175,23 @@ if __name__ == '__main__':
     f_en_de_theta = np.zeros((1, len(f_en_de)))
     print 'reading phi ed'
     phi_en_de1 = np.loadtxt(options.phi_ed)
+    if make_phi_sparse:
+        phi_en_de1[phi_en_de1 < 0.5] = 0.0
     phi_en_de1 = np.reshape(phi_en_de1, (len(en_domain) * len(de_domain), 1))
 
     print 'reading phi ped'
     phi_en_de2 = np.loadtxt(options.phi_ped)
+    if make_phi_sparse:
+        phi_en_de2[phi_en_de2 < 0.5] = 0.0
     phi_en_de2 = np.reshape(phi_en_de2, (len(en_domain) * len(de_domain), 1))
     ss = np.shape(phi_en_de2)
     phi_en_de3 = np.random.rand(ss[0], ss[1])
+    if make_phi_sparse:
+        phi_en_de3[phi_en_de3 < 0.5] = 0
     phi_en_de4 = np.zeros_like(phi_en_de1)
-
     phi_en_de = np.concatenate((phi_en_de1, phi_en_de2, phi_en_de3, phi_en_de4), axis=1)
+    phi_en_de.astype(DTYPE)
 
-    # phi_en_de = np.random.rand(len(en_domain) * len(de_domain), len(f_en_de))
-    # phi_en_de = np.random.rand(len(en_domain) * len(de_domain), len(f_en_de))
-    # phi_en_de[phi_en_de > 0.5] = 1.0
-    # phi_en_de[phi_en_de < 0.2] = 0.0
-    # pre_fire_en_de = sparse.csr_matrix(pre_fire_en_de)
-
-    load_times = []
-    grad_times = []
-    inference_times = []
-    mp_times = []
     fg = None
     split_ratio = int(len(training_instances) * 0.33)
     test_instances = training_instances[:split_ratio]
@@ -199,19 +204,16 @@ if __name__ == '__main__':
             for t_idx, training_instance in enumerate(test_instances):
                 j_ti = json.loads(training_instance)
                 ti = TrainingInstance.from_dict(j_ti)
-                lt = time.time()
+
                 fg = FactorGraph(theta_en_en=f_en_en_theta if fg is None else fg.theta_en_en,
                                  theta_en_de=f_en_de_theta if fg is None else fg.theta_en_de,
                                  phi_en_en=phi_en_en,
                                  phi_en_de=phi_en_de)
 
                 fg = load_fg(fg, ti, en_domain, de2id=de2id, en2id=en2id)
-                load_times.append(time.time() - lt)
-                mp = time.time()
+
                 for f in fg.factors:
                     f.potential_table.make_potentials()  # can this be made faster??
-                mp_times.append(time.time() - mp)
-                it = time.time()
                 fg.initialize()
                 fg.treelike_inference(3)
                 lp += fg.get_posterior_probs()
@@ -219,6 +221,10 @@ if __name__ == '__main__':
                 fg.get_max_postior_label(top=5)
                 # print '...'
             print 'log sum of posteriors probs for subervised labels:', lp
+        load_times = []
+        grad_times = []
+        inference_times = []
+        mp_times = []
         random.shuffle(all_training_instances)
         for t_idx, training_instance in enumerate(all_training_instances):
             sys.stderr.write('.')
@@ -244,9 +250,9 @@ if __name__ == '__main__':
             gt = time.time()
             fg.update_theta()
             grad_times.append(time.time() - gt)
-            # print 'ave load times:', sum(load_times) / float(len(load_times))
-            # print 'ave mp times  :', sum(mp_times) / float(len(mp_times))
-            # print 'ave inf times :', sum(inference_times) / float(len(inference_times))
-            # print 'ave grad times:', sum(grad_times) / float(len(grad_times))
+        print 'ave load times:', sum(load_times) / float(len(load_times))
+        print 'ave mp times  :', sum(mp_times) / float(len(mp_times))
+        print 'ave inf times :', sum(inference_times) / float(len(inference_times))
+        print 'ave grad times:', sum(grad_times) / float(len(grad_times))
         lr *= 0.5
     print 'theta final:', fg.theta_en_de, fg.theta_en_en

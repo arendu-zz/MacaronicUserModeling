@@ -13,6 +13,7 @@ if __name__ == '__main__':
     de_domain = ['de_' + str(i) for i in range(10)]
 
     f_en_en = ['f1', 'f2', 'f3', 'f4', 'f5']
+    f_en_de = ['x', 'y', 'z']
 
     f_en_en_theta = np.zeros((1, len(f_en_en)))
     phi_en_en = np.random.rand(len(en_domain) * len(en_domain), len(f_en_en))
@@ -20,7 +21,6 @@ if __name__ == '__main__':
     phi_en_en[phi_en_en < 1.0] = 0.0
     # pre_fire_en_en = sparse.csr_matrix(pre_fire_en_en)
 
-    f_en_de = ['x', 'y', 'z']
     f_en_de_theta = np.zeros((1, len(f_en_de)))
     phi_en_de = np.random.rand(len(en_domain) * len(de_domain), len(f_en_de))
     phi_en_de[phi_en_de > 0.5] = 1.0
