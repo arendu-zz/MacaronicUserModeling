@@ -218,7 +218,7 @@ if __name__ == '__main__':
                 fg.treelike_inference(3)
                 lp += fg.get_posterior_probs()
                 # print t_idx
-                fg.get_max_postior_label(top=5)
+                fg.get_max_postior_label(top=15)
                 # print '...'
             print 'log sum of posteriors probs for subervised labels:', lp
         load_times = []
