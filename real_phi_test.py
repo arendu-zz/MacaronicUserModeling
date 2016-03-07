@@ -65,6 +65,8 @@ def load_fg(fg, ti, en_domain, de2id, en2id):
     for pg in ti.past_correct_guesses:
         i = en2id[pg.guess]
         j = de2id[pg.l2_word]
+        history_feature[i, :] -= 0.5
+        history_feature[:, j] -= 0.5
         history_feature[i, j] += 1
     history_feature = np.reshape(history_feature, (np.shape(fg.phi_en_de)[0],))
     fg.phi_en_de[:, -1] = history_feature
