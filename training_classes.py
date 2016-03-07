@@ -92,9 +92,9 @@ class Guess(dict):
         dict.__init__(self)
         self.__dict__ = self
         Guess.spell = enchant.DictWithPWL("en_US",
-                                          "/Users/arenduchintala/Projects2/MacaronicWebApp/data/vocab/en.vocab.50k")
+                                          "/home/arenduc1/Projects/macaronic-feature-extraction/en.vocab.50k")
         Guess.spell_german = enchant.request_pwl_dict(
-            '/Users/arenduchintala/Projects2/MacaronicWebApp/data/de/nachrichtenleicht-filtered/nachrichtenleicht.de.vocab')
+            '/home/arenduc1/Projects/macaronic-feature-extraction/nachrichtenleicht.de.vocab')
         Guess.ed = EditDistance(None)
 
         tmp_l2_lower = l2_word.lower()
