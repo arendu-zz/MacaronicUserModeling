@@ -124,7 +124,7 @@ if __name__ == '__main__':
     opt.add_option('--phi_ped', dest='phi_ped', default='')
     (options, _) = opt.parse_args()
 
-    if options.training_instances == '' or options.en_domain == '' or options.de_domain == '' or options.phi_wiwj == '' or options.phi_ed == '' or options.phi_ped == '':
+    if options.training_instances == '' or options.en_domain == '' or options.de_domain == '':
         sys.stderr.write(
                 'Usage: python real_phi_test.py\n\
                         --ti [training instance file]\n \
@@ -147,42 +147,18 @@ if __name__ == '__main__':
     # en_domain = ['en_' + str(i) for i in range(500)]
     # de_domain = ['de_' + str(i) for i in range(100)]
     print 'read ti and domains...'
-    f_en_en = ['f1', 'dummy_ee']
-
-    # f_en_en_theta = np.random.rand(1, len(f_en_en)) - 0.5  # zero mean random values
+    f_en_en = ['f1', 'f2', 'f3', 'f4', 'f5']
+    f_en_de = ['x', 'y', 'z']
     f_en_en_theta = np.zeros((1, len(f_en_en)))
-    print 'reading phi wiwj'
-    phi_en_en1 = np.loadtxt(options.phi_wiwj)
-    phi_en_en1 = np.reshape(phi_en_en1, (len(en_domain) * len(en_domain), 1))
-    ss = np.shape(phi_en_en1)
-    phi_en_en2 = np.random.rand(ss[0], ss[1])
-    phi_en_en = np.concatenate((phi_en_en1, phi_en_en2), axis=1)
-    # phi_en_en = np.random.rand(len(en_domain) * len(en_domain), len(f_en_en))
-    # phi_en_en[phi_en_en > 0.8] = 1.0
-    # phi_en_en[phi_en_en < 1.0] = 0.0
+    phi_en_en = np.random.rand(len(en_domain) * len(en_domain), len(f_en_en))
+    phi_en_en[phi_en_en > 0.8] = 1.0
+    phi_en_en[phi_en_en < 1.0] = 0.0
     # pre_fire_en_en = sparse.csr_matrix(pre_fire_en_en)
 
-    f_en_de = ['x', 'y', 'dummy_ef', 'history']
-    # f_en_de_theta = np.random.rand(1, len(f_en_de)) - 0.5  # zero mean random values
     f_en_de_theta = np.zeros((1, len(f_en_de)))
-    print 'reading phi ed'
-    phi_en_de1 = np.loadtxt(options.phi_ed)
-    phi_en_de1 = np.reshape(phi_en_de1, (len(en_domain) * len(de_domain), 1))
-
-    print 'reading phi ped'
-    phi_en_de2 = np.loadtxt(options.phi_ped)
-    phi_en_de2 = np.reshape(phi_en_de2, (len(en_domain) * len(de_domain), 1))
-    ss = np.shape(phi_en_de2)
-    phi_en_de3 = np.random.rand(ss[0], ss[1])
-    phi_en_de4 = np.zeros_like(phi_en_de1)
-
-    phi_en_de = np.concatenate((phi_en_de1, phi_en_de2, phi_en_de3, phi_en_de4), axis=1)
-
-    # phi_en_de = np.random.rand(len(en_domain) * len(de_domain), len(f_en_de))
-    # phi_en_de = np.random.rand(len(en_domain) * len(de_domain), len(f_en_de))
-    # phi_en_de[phi_en_de > 0.5] = 1.0
-    # phi_en_de[phi_en_de < 0.2] = 0.0
-    # pre_fire_en_de = sparse.csr_matrix(pre_fire_en_de)
+    phi_en_de = np.random.rand(len(en_domain) * len(de_domain), len(f_en_de))
+    phi_en_de[phi_en_de > 0.5] = 1.0
+    phi_en_de[phi_en_de < 0.2] = 0.0
 
     load_times = []
     grad_times = []
@@ -205,12 +181,4 @@ if __name__ == '__main__':
         fg.learning_rate = lr
 
         fg = load_fg(fg, ti, en_domain, de2id=de2id, en2id=en2id)
-        #load_times.append(time.time() - lt)
-        #mp = time.time()
-        #for f in fg.factors:
-        #    f.potential_table.make_potentials()  # can this be made faster??
-        #mp_times.append(time.time() - mp)
-        #it = time.time()
-        #fg.initialize()
-    print 'done checking all instances...', len(training_instances)
-
+    print 'done checking', len(training_instances)
