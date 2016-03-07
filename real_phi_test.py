@@ -1,6 +1,7 @@
 __author__ = 'arenduchintala'
 import itertools
-import sys
+import pdb
+import random
 from training_classes import TrainingInstance, Guess, SimpleNode
 import json
 import numpy as np
@@ -8,10 +9,11 @@ import sys
 import codecs
 from optparse import OptionParser
 from LBP import FactorNode, FactorGraph, VariableNode, VAR_TYPE_PREDICTED, PotentialTable, VAR_TYPE_GIVEN
-import timeit
+import time
 import codecs
 
-np.seterr(all='raise')
+np.seterr(divide='raise', over='raise', under='ignore')
+
 np.set_printoptions(precision=4, suppress=True)
 
 
@@ -56,11 +58,21 @@ def load_fg(fg, ti, en_domain, de2id, en2id):
     ordered_current_sent = [simplenode for position, simplenode in ordered_current_sent]
     var_node_pairs = get_var_node_pair(ordered_current_sent, ti.current_guesses, ti.current_revealed_guesses, en_domain)
     factors = []
+    len_en_domain = len(en_domain)
+    len_de_domain = len(de_domain)
+
+    history_feature = np.zeros((len_en_domain, len_de_domain))
+    for pg in ti.past_correct_guesses:
+        i = en2id[pg.guess]
+        j = de2id[pg.l2_word]
+        history_feature[i, j] += 1
+    history_feature = np.reshape(history_feature, (np.shape(fg.phi_en_de)[0],))
+    fg.phi_en_de[:, -1] = history_feature
 
     # create Ve x Vg factors
     for v, simplenode in var_node_pairs:
         if v.var_type == VAR_TYPE_PREDICTED:
-            f = FactorNode(id=len(factors), factor_type='en_de', observed_domain_size=len(de_domain))
+            f = FactorNode(id=len(factors), factor_type='en_de', observed_domain_size=len_de_domain)
             o_idx = de2id[simplenode.l2_word]
             p = PotentialTable(v_id2dim={v.id: 0}, table=None, observed_dim=o_idx)
             f.add_varset_with_potentials(varset=[v], ptable=p)
@@ -71,7 +83,7 @@ def load_fg(fg, ti, en_domain, de2id, en2id):
             raise BaseException("vars are given or predicted only (no latent)")
 
     for idx_1, (v1, simplenode_1) in enumerate(var_node_pairs):
-        for idx_2, (v2, simplenode_2) in enumerate(var_node_pairs[idx_1 + 1:]):
+        for idx_2, (v2, simplenode_2) in enumerate(var_node_pairs[idx_1 + 1:idx_1 + 2]):
             if v1.var_type == VAR_TYPE_PREDICTED and v2.var_type == VAR_TYPE_PREDICTED:
                 f = FactorNode(id=len(factors), factor_type='en_en')
                 p = PotentialTable(v_id2dim={v1.id: 0, v2.id: 1}, table=None, observed_dim=None)
@@ -81,26 +93,20 @@ def load_fg(fg, ti, en_domain, de2id, en2id):
                 pass
             else:
                 v_given = v1 if v1.var_type == VAR_TYPE_GIVEN else v2
-                simplenode_given = simplenode_1 if v1.var_type == VAR_TYPE_GIVEN else simplenode_2
                 v_pred = v1 if v1.var_type == VAR_TYPE_PREDICTED else v2
-                simplenode_pred = simplenode_1 if v1.var_type == VAR_TYPE_PREDICTED else simplenode_2
                 f = FactorNode(id=len(factors),
                                factor_type='en_en',
                                observed_domain_type='en',
-                               observed_domain_size=len(en_domain))
-                try:
-                    o_idx = en2id[v_given.supervised_label]  # either a users guess OR a revealed word
-                except:
-                    print 'wtf?'
+                               observed_domain_size=len_en_domain)
+                o_idx = en2id[v_given.supervised_label]  # either a users guess OR a revealed word -> see line 31,36
                 p = PotentialTable(v_id2dim={v_pred.id: 0}, table=None, observed_dim=o_idx)
                 f.add_varset_with_potentials(varset=[v_pred], ptable=p)
                 factors.append(f)
             pass
+
     for f in factors:
         fg.add_factor(f)
 
-    for f in fg.factors:
-        f.potential_table.make_potentials()
     return fg
 
 
@@ -138,19 +144,24 @@ if __name__ == '__main__':
     # en_domain = ['en_' + str(i) for i in range(500)]
     # de_domain = ['de_' + str(i) for i in range(100)]
     print 'read ti and domains...'
-    f_en_en = ['f1']
+    f_en_en = ['f1', 'dummy_ee']
 
-    f_en_en_theta = np.ones((1, len(f_en_en)))
+    # f_en_en_theta = np.random.rand(1, len(f_en_en)) - 0.5  # zero mean random values
+    f_en_en_theta = np.zeros((1, len(f_en_en)))
     print 'reading phi wiwj'
-    phi_en_en = np.loadtxt(options.phi_wiwj)
-    phi_en_en = np.reshape(phi_en_en, (len(en_domain) * len(en_domain), len(f_en_en)))
+    phi_en_en1 = np.loadtxt(options.phi_wiwj)
+    phi_en_en1 = np.reshape(phi_en_en1, (len(en_domain) * len(en_domain), 1))
+    ss = np.shape(phi_en_en1)
+    phi_en_en2 = np.random.rand(ss[0], ss[1])
+    phi_en_en = np.concatenate((phi_en_en1, phi_en_en2), axis=1)
     # phi_en_en = np.random.rand(len(en_domain) * len(en_domain), len(f_en_en))
     # phi_en_en[phi_en_en > 0.8] = 1.0
     # phi_en_en[phi_en_en < 1.0] = 0.0
     # pre_fire_en_en = sparse.csr_matrix(pre_fire_en_en)
 
-    f_en_de = ['x', 'y', 'dummy']
-    f_en_de_theta = np.ones((1, len(f_en_de)))
+    f_en_de = ['x', 'y', 'dummy_ef', 'history']
+    # f_en_de_theta = np.random.rand(1, len(f_en_de)) - 0.5  # zero mean random values
+    f_en_de_theta = np.zeros((1, len(f_en_de)))
     print 'reading phi ed'
     phi_en_de1 = np.loadtxt(options.phi_ed)
     phi_en_de1 = np.reshape(phi_en_de1, (len(en_domain) * len(de_domain), 1))
@@ -160,8 +171,9 @@ if __name__ == '__main__':
     phi_en_de2 = np.reshape(phi_en_de2, (len(en_domain) * len(de_domain), 1))
     ss = np.shape(phi_en_de2)
     phi_en_de3 = np.random.rand(ss[0], ss[1])
-    
-    phi_en_de = np.concatenate((phi_en_de1, phi_en_de2, phi_en_de3), axis=1)
+    phi_en_de4 = np.zeros_like(phi_en_de1)
+
+    phi_en_de = np.concatenate((phi_en_de1, phi_en_de2, phi_en_de3, phi_en_de4), axis=1)
 
     # phi_en_de = np.random.rand(len(en_domain) * len(de_domain), len(f_en_de))
     # phi_en_de = np.random.rand(len(en_domain) * len(de_domain), len(f_en_de))
@@ -169,30 +181,68 @@ if __name__ == '__main__':
     # phi_en_de[phi_en_de < 0.2] = 0.0
     # pre_fire_en_de = sparse.csr_matrix(pre_fire_en_de)
 
+    load_times = []
+    grad_times = []
+    inference_times = []
+    mp_times = []
+    fg = None
+    test_instances = training_instances[:10]
+    all_training_instances = training_instances[10:]
+    lr = 0.1
+    for epoch in range(10):
+        print 'epoch', epoch
+        lp = 0.0
+        for t_idx, training_instance in enumerate(training_instances[:10]):
+            j_ti = json.loads(training_instance)
+            ti = TrainingInstance.from_dict(j_ti)
+            lt = time.time()
+            fg = FactorGraph(theta_en_en=f_en_en_theta if fg is None else fg.theta_en_en,
+                             theta_en_de=f_en_de_theta if fg is None else fg.theta_en_de,
+                             phi_en_en=phi_en_en,
+                             phi_en_de=phi_en_de)
 
-    st = timeit.timeit()
-    for t_idx, training_instance in enumerate(training_instances):
-        j_ti = json.loads(training_instance)
-        ti = TrainingInstance.from_dict(j_ti)
-        fg = FactorGraph(theta_en_en=f_en_en_theta,
-                         theta_en_de=f_en_de_theta,
-                         phi_en_en=phi_en_en,
-                         phi_en_de=phi_en_de)
+            fg = load_fg(fg, ti, en_domain, de2id=de2id, en2id=en2id)
+            load_times.append(time.time() - lt)
+            mp = time.time()
+            for f in fg.factors:
+                f.potential_table.make_potentials()  # can this be made faster??
+            mp_times.append(time.time() - mp)
+            it = time.time()
+            fg.initialize()
+            fg.treelike_inference(3)
+            lp += fg.get_posterior_probs()
+            # print t_idx
+            # fg.get_max_postior_label(top=5)
+            # print '...'
+        print 'log sum of posteriors probs for subervised labels:', lp
+        random.shuffle(all_training_instances)
+        for t_idx, training_instance in enumerate(all_training_instances):
+            sys.stderr.write('.')
+            j_ti = json.loads(training_instance)
+            ti = TrainingInstance.from_dict(j_ti)
+            lt = time.time()
+            fg = FactorGraph(theta_en_en=f_en_en_theta if fg is None else fg.theta_en_en,
+                             theta_en_de=f_en_de_theta if fg is None else fg.theta_en_de,
+                             phi_en_en=phi_en_en,
+                             phi_en_de=phi_en_de)
+            fg.learning_rate = lr
 
-        fg = load_fg(fg, ti, en_domain, de2id=de2id, en2id=en2id)
-
-        fg.initialize()
-        print 'initialized', t_idx
-        print fg.isLoopy
-        # for v in fg.variables:
-        # m = v.get_marginal()
-        #    print np.reshape(m.m, (np.size(m.m),))
-        fg.treelike_inference(3)
-        grad_en_de, grad_en_en = fg.get_gradient()
-        fg.theta_en_en -= 0.1 * grad_en_en
-        fg.theta_en_de -= 0.1 * grad_en_de
-        f_en_en_theta = fg.theta_en_en
-        f_en_de_theta = fg.theta_en_de
-        print f_en_de_theta
-        print f_en_en_theta
-    print timeit.timeit() - st  , 'time taken'        
+            fg = load_fg(fg, ti, en_domain, de2id=de2id, en2id=en2id)
+            load_times.append(time.time() - lt)
+            mp = time.time()
+            for f in fg.factors:
+                f.potential_table.make_potentials()  # can this be made faster??
+            mp_times.append(time.time() - mp)
+            it = time.time()
+            fg.initialize()
+            fg.treelike_inference(3)
+            inference_times.append(time.time() - it)
+            gt = time.time()
+            fg.update_theta()
+            grad_times.append(time.time() - gt)
+            # print 'ave load times:', sum(load_times) / float(len(load_times))
+            # print 'ave mp times  :', sum(mp_times) / float(len(mp_times))
+            # print 'ave inf times :', sum(inference_times) / float(len(inference_times))
+            # print 'ave grad times:', sum(grad_times) / float(len(grad_times))
+        lr *= 0.5
+    print 'theta final:', fg.theta_en_de, fg.theta_en_en

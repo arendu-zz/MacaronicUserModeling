@@ -9,19 +9,19 @@ np.seterr(all='raise')
 np.set_printoptions(precision=4, suppress=True)
 if __name__ == '__main__':
 
-    en_domain = ['en_' + str(i) for i in range(500)]
-    de_domain = ['de_' + str(i) for i in range(100)]
+    en_domain = ['en_' + str(i) for i in range(50)]
+    de_domain = ['de_' + str(i) for i in range(10)]
 
     f_en_en = ['f1', 'f2', 'f3', 'f4', 'f5']
 
-    f_en_en_theta = np.ones((1, len(f_en_en)))
+    f_en_en_theta = np.zeros((1, len(f_en_en)))
     phi_en_en = np.random.rand(len(en_domain) * len(en_domain), len(f_en_en))
     phi_en_en[phi_en_en > 0.8] = 1.0
     phi_en_en[phi_en_en < 1.0] = 0.0
     # pre_fire_en_en = sparse.csr_matrix(pre_fire_en_en)
 
     f_en_de = ['x', 'y', 'z']
-    f_en_de_theta = np.ones((1, len(f_en_de)))
+    f_en_de_theta = np.zeros((1, len(f_en_de)))
     phi_en_de = np.random.rand(len(en_domain) * len(de_domain), len(f_en_de))
     phi_en_de[phi_en_de > 0.5] = 1.0
     phi_en_de[phi_en_de < 0.2] = 0.0
@@ -42,7 +42,7 @@ if __name__ == '__main__':
             v = VariableNode(id=i, var_type=p_or_g,
                              domain_type='en',
                              domain=en_domain,
-                             supervised_label=en_domain[np.random.randint(0, 100)])
+                             supervised_label=en_domain[np.random.randint(0, len(en_domain))])
             variables.append(v)
 
         factors = []

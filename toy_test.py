@@ -104,9 +104,9 @@ def load_fg(fg, ti, en_domain, de2id, en2id):
 
 
 if __name__ == '__main__':
-    training_instances = codecs.open('mturk-data/t.random.200').readlines()
-    de_domain = [i.strip() for i in codecs.open('mturk-data/o.random.200.vocab.de', 'r', 'utf8').readlines()]
-    en_domain = [i.strip() for i in codecs.open('mturk-data/o.random.200.vocab.en.lower', 'r', 'utf8').readlines()]
+    training_instances = codecs.open('mturk-data/ti.200').readlines()
+    de_domain = [i.strip() for i in codecs.open('mturk-data/vocab.200.de', 'r', 'utf8').readlines()]
+    en_domain = [i.strip() for i in codecs.open('mturk-data/vocab.200.en.lower', 'r', 'utf8').readlines()]
     en2id = dict((e, idx) for idx, e in enumerate(en_domain))
     de2id = dict((d, idx) for idx, d in enumerate(de_domain))
     print len(en_domain), len(de_domain)
@@ -117,7 +117,7 @@ if __name__ == '__main__':
 
     f_en_en_theta = np.ones((1, len(f_en_en)))
     phi_en_en = np.random.rand(len(en_domain) * len(en_domain), len(f_en_en))
-    phi_en_en[phi_en_en > 0.8] = 1.0
+    phi_en_en[phi_en_en > 0.5] = 1.0
     phi_en_en[phi_en_en < 1.0] = 0.0
     # pre_fire_en_en = sparse.csr_matrix(pre_fire_en_en)
 
@@ -148,8 +148,8 @@ if __name__ == '__main__':
         #    print np.reshape(m.m, (np.size(m.m),))
         fg.treelike_inference(3)
         grad_en_de, grad_en_en = fg.get_gradient()
-        fg.theta_en_en += 0.1 * grad_en_en
-        fg.theta_en_de += 0.1 * grad_en_de
+        fg.theta_en_en += 0.05 * grad_en_en
+        fg.theta_en_de += 0.05 * grad_en_de
         f_en_en_theta = fg.theta_en_en
         f_en_de_theta = fg.theta_en_de
         print f_en_de_theta

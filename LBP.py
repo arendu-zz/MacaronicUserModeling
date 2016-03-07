@@ -3,6 +3,7 @@ import numpy as np
 from numpy import float32 as DTYPE
 import pdb
 import random
+import array_utils
 
 global VAR_TYPE_LATENT, VAR_TYPE_PREDICTED, VAR_TYPE_GIVEN, UNARY_FACTOR, BINARY_FACTOR
 VAR_TYPE_PREDICTED = 'var_type_predicted'
@@ -23,7 +24,8 @@ class FactorGraph():
         self.messages = {}
         self.normalize_messages = True
         self.isLoopy = None
-        self.regularization_param = 0.1
+        self.regularization_param = 0.01
+        self.learning_rate = 0.1
 
     def add_factor(self, fac):
         assert fac not in self.factors
@@ -92,33 +94,45 @@ class FactorGraph():
                 # todo: this check above is not comprehensive must check if dimsion of the potential table
             # todo: matches in the correct order of variables given by var_id2dim
             if len(f.varset) == 1:
-                self.messages[str(f), str(f.varset[0])] = Message.new_message(f.varset[0].domain, 1.0)
+                self.messages[str(f), str(f.varset[0])] = Message.new_message(f.varset[0].domain,
+                                                                              1.0 / len(f.varset[0].domain))
             else:
                 for v in f.varset:
-                    self.messages[str(v), str(f)] = Message.new_message(v.domain, 1.0)
-                    self.messages[str(f), str(v)] = Message.new_message(v.domain, 1.0)
+                    self.messages[str(v), str(f)] = Message.new_message(v.domain, 1.0 / float(len(v.domain)))
+                    self.messages[str(f), str(v)] = Message.new_message(v.domain, 1.0 / len(v.domain))
 
     def treelike_inference(self, iterations):
         iterations = iterations if self.isLoopy else 1
         for _ in range(iterations):
-            print 'iteration', _
+            # print 'iteration', _
             _rand_key = random.sample(self.variables.keys(), 1)[0]
             _root = self.variables[_rand_key]
             _schedule = self.get_message_schedule(_root)
-            print 'leaves to root...', str(_root)
+            # print 'leaves to root...', str(_root)
             for frm, to in reversed(_schedule):
                 if isinstance(to, FactorNode) and len(to.varset) < 2:
                     pass
                 else:
                     # print 'send msg', str(frm), '->', str(to)
                     frm.update_message_to(to)
-            print 'root to leaves...', str(_root)
+            # print 'root to leaves...', str(_root)
             for to, frm in _schedule:
                 if isinstance(to, FactorNode) and len(to.varset) < 2:
                     pass
                 else:
                     # print 'send msg', str(frm), '->', str(to)
                     frm.update_message_to(to)
+
+    def get_posterior_probs(self):
+        log_posterior = 0.0
+        for v_key, v in self.variables.iteritems():
+            m = v.get_marginal()
+            log_posterior += np.sum(np.log(m.m[v.supervised_label_index]))
+        return log_posterior
+
+    def get_max_postior_label(self, top=10):
+        for v_key, v in self.variables.iteritems():
+            print v.get_max_vocab(top)
 
     def hw_inf(self, iterations):
         raise BaseException("This method assumes self.variables is a list.. depricated...")
@@ -154,11 +168,23 @@ class FactorGraph():
                 grad_en_de += f.get_gradient()
             else:
                 raise BaseException('only 2 kinds of factors allowed...')
+        # print 'current theta :', self.theta_en_de, self.theta_en_en
         reg_en_de = self.regularization_param * self.theta_en_de
         reg_en_en = self.regularization_param * self.theta_en_en
+        # print 'current reg   :', reg_en_de, reg_en_en
+        # print 'current grad  :', grad_en_de, grad_en_en
+        # grad_en_en = grad_en_en
+        # grad_en_de = grad_en_de
         grad_en_en -= reg_en_en
         grad_en_de -= reg_en_de
+        # print 'reg grad      :', grad_en_de, grad_en_en
         return grad_en_de, grad_en_en
+
+    def update_theta(self):
+        grad_en_de, grad_en_en = self.get_gradient()
+        self.theta_en_en += (self.learning_rate * grad_en_en)
+        self.theta_en_de += (self.learning_rate * grad_en_de)
+        # print '                   new theta:', self.theta_en_de, self.theta_en_en
 
 
 class VariableNode():
@@ -197,7 +223,7 @@ class VariableNode():
     def update_message_to(self, fc):
         assert isinstance(fc, FactorNode)
         assert fc in self.facset
-        new_m = Message.new_message(self.domain, 1.0)
+        new_m = Message.new_message(self.domain, 1.0 / len(self.domain))
         for other_fc in self.facset:
             if other_fc is not fc:
                 m = self.graph.messages[str(other_fc), str(self)]  # from other factors to this variable
@@ -208,12 +234,20 @@ class VariableNode():
         self.graph.messages[str(self), str(fc)] = new_m
 
     def get_marginal(self):
-        new_m = Message.new_message(self.domain, 1.0)
+        new_m = Message.new_message(self.domain, 1.0 / len(self.domain))
         for fc in self.facset:
             m = self.graph.messages[str(fc), str(self)]  # incoming message
             new_m = pointwise_multiply(m, new_m)
-        new_m.renormalize()
+        if self.graph.normalize_messages:
+            new_m.renormalize()
         return new_m
+
+    def get_max_vocab(self, top):
+        m = self.get_marginal()
+        a = np.reshape(m.m, (np.size(m.m, )))
+        max_idx = np.argpartition(a, -top)[-top:]
+        max_vocab = [self.domain[i] for i in max_idx]
+        return self.supervised_label, max_vocab
 
 
 class FactorNode():
@@ -283,18 +317,28 @@ class FactorNode():
         if len(other_vars) == 0:
             # this is a unary factor
             new_m = np.copy(self.potential_table.table)
-            self.graph.messages[str(self), str(var)] = Message(new_m)
+            new_m = Message(new_m)
+            if self.graph.normalize_messages:
+                new_m.renormalize()
+            self.graph.messages[str(self), str(var)] = new_m
         else:
             o_var = other_vars[0]
             o_var_dim = self.potential_table.var_id2dim[o_var.id]
             msg = self.graph.messages[str(o_var), str(self)]
             if o_var_dim == 1:
-                mul = np.multiply(msg.m.T, self.potential_table.table)
-                marginalized = np.sum(mul, 1)
+                # mul = np.multiply(msg.m.T, self.potential_table.table)
+                # marginalized = np.sum(mul, 1)
+                test_marginalized = np.dot(self.potential_table.table, msg.m)
+                # test_marginalized = np.reshape(test_marginalized, np.shape(marginalized))
+                # assert np.allclose(test_marginalized, marginalized)
             else:
-                mul = np.multiply(msg.m.T, self.potential_table.table.T).T
-                marginalized = np.sum(mul, 0)
-            new_m = Message(marginalized)
+                # mul = np.multiply(msg.m.T, self.potential_table.table.T).T
+                # marginalized = np.sum(mul, 0)
+                test_marginalized = np.dot(msg.m.T, self.potential_table.table)
+                # test_marginalized = np.reshape(test_marginalized, np.shape(marginalized))
+                # assert np.allclose(test_marginalized, marginalized)
+
+            new_m = Message(test_marginalized)
             if self.graph.normalize_messages:
                 new_m.renormalize()
             assert np.shape(new_m.m) == np.shape(self.graph.messages[str(self), str(var)].m)
@@ -307,7 +351,7 @@ class FactorNode():
         r = None
         c = None
         if len(self.varset) == 1:
-            m = Message.new_message(self.varset[0].domain, 1.0)
+            m = Message.new_message(self.varset[0].domain, 1.0 / len(self.varset[0].domain))
             m.renormalize()
             marignals = m.m
         else:
@@ -321,9 +365,9 @@ class FactorNode():
                     r = np.reshape(m.m, (1, np.size(m.m)))  # row vector
                 else:
                     raise NotImplementedError("only supports pairwise factors..")
-            marignals = np.dot(c, r)
+            marignals = array_utils.matrix_multiply(c, r)  # np.dot(c, r)
         beliefs = np.multiply(marignals, self.potential_table.table)
-        beliefs = beliefs / np.sum(beliefs)
+        beliefs = array_utils.normalize(beliefs)
         return beliefs
 
     def get_observed_factor(self):
@@ -371,6 +415,7 @@ class ObservedFactor(FactorNode):
 class Message():
     def __init__(self, m):
         assert isinstance(m, np.ndarray)
+        assert np.size(m[m < 0.0]) == 0
         if np.shape(m) != (np.size(m), 1):
             self.m = np.reshape(m, (np.size(m), 1))
         else:
@@ -380,11 +425,21 @@ class Message():
         return np.array_str(self.m)
 
     def renormalize(self):
-        self.m = self.m / np.sum(self.m)
+        s = np.sum(self.m)
+        if s > 0:
+            # self.m = self.m / np.sum(self.m)
+            self.m = array_utils.normalize(self.m)
+        else:
+            e = np.empty_like(self.m)
+            e.fill(1.0 / np.size(self.m))
+            self.m = e
+        assert np.size(self.m[self.m < 0.0]) == 0
+        assert np.abs(np.sum(self.m) - 1.0) < 1e-10
 
     @staticmethod
     def new_message(domain, init):
-        m = np.ones((len(domain), 1)) * init
+        m = np.empty((len(domain), 1))
+        m.fill(init)
         m.astype(DTYPE)
         return Message(m)
 
@@ -416,7 +471,7 @@ class PotentialTable():
     def make_potentials(self):
         # table = np.exp(np.multiply(self.factor.get_theta(), self.factor.get_phi()))
         # table = np.sum(table, 1)
-        table = self.factor.get_phi().dot(self.factor.get_theta().T)
+        table = self.factor.get_phi().dot(self.factor.get_theta().T)  # todo: this line is very very slow!!!!
         table = np.exp(table)
         table_shape = self.factor.get_shape()
         table = np.reshape(table, table_shape)
@@ -443,6 +498,8 @@ def pointwise_multiply(m1, m2):
     elif m1 is None:
         return m2
     else:
+        # print 'tt:', np.sum(m1.m), np.sum(m2.m)
         assert np.shape(m1.m) == np.shape(m2.m)
-        new_m = np.multiply(m1.m, m2.m)
+        # assert np.abs(np.sum(m1.m) - 1) < 1e-5
+        new_m = array_utils.pointwise_multiply(m1.m, m2.m)
     return Message(new_m)
