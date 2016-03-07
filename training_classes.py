@@ -110,7 +110,7 @@ class Guess(dict):
                 sys.stderr.write("phrasal guess:" + guess + '\n')
             guess = sorted([(len(g), g) for g in guess.split()])[-1][1]
             guess = guess[:-1] if guess[-1] == '*' and len(guess) > 1 else guess
-            if check_ignore_case(guess, Guess.spell):
+            if check_ignore_case(guess, Guess.spell) or True: # the or True condition means at this stage we accept what ever the make_training_instance.py file has generated.
                 self.guess = guess.lower().replace("'", "")
             else:
                 result = copy_or_not(guess, tmp_l2_lower, Guess.spell, Guess.ed)
