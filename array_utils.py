@@ -8,7 +8,7 @@ def pointwise_multiply(m1, m2):
 
 
 def clip(m1):
-    m1[m1 < 1.0e-100] = 0.0
+    m1[m1 < 1.0e-100] = 0.0  # we dont have to worry about these being negative...
     return m1
 
 

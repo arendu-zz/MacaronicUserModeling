@@ -402,21 +402,17 @@ class FactorNode():
         cg = time.time()
         g = self.cell_gradient()
         self.graph.cg_times.append(time.time() - cg)
-        gg = time.time()
-        f_sparse = False
+
         if self.potential_table.observed_dim is not None:
             sparse_g = np.zeros(self.get_shape())
             g = np.reshape(g, (np.size(g),))
             sparse_g[:, self.potential_table.observed_dim] = g
             g = sparse_g
-            f_sparse = True
         else:
             # g is already  a matrix
             pass
+        gg = time.time()
         f_ij = np.reshape(g, (np.size(g), 1))
-        if f_sparse:
-            f_ij = sparse.csr_matrix(f_ij)
-        # grad1 = f_ij.T.dot(self.get_phi())
         grad1 = (self.get_phi_csc().T.dot(f_ij)).T
         # if __debug__: assert  np.allclose(grad1, grad2.T)
         '''on_the_fly_feature_values = self.get_on_the_fly_feature_values()
@@ -427,11 +423,9 @@ class FactorNode():
         return grad1
 
     def cell_gradient(self):
-        obs = self.get_observed_factor()
-        marginal = self.get_factor_beliefs()  # this is the same because I assume binary features  values at the "cell level"
-        exp = marginal
-        g = obs - exp
-        return g
+        obs_counts = self.get_observed_factor()
+        exp_counts = self.get_factor_beliefs()  # this is the same because I assume binary features  values at the "cell level"
+        return obs_counts - exp_counts
 
 
 class ObservedFactor(FactorNode):

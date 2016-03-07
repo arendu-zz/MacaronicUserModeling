@@ -69,9 +69,9 @@ def load_fg(fg, ti, en_domain, de2id, en2id):
     for pg in ti.past_correct_guesses:
         i = en2id[pg.guess]
         j = de2id[pg.l2_word]
-        history_feature[i, :] -= 0.5
-        history_feature[:, j] -= 0.5
-        history_feature[i, j] += 1
+        history_feature[i, :] += 1.0
+        history_feature[:, j] += 1.0
+        history_feature[i, j] += 1.0
     history_feature = np.reshape(history_feature, (np.shape(fg.phi_en_de)[0],))
     fg.phi_en_de[:, -1] = history_feature
 
@@ -216,6 +216,7 @@ if __name__ == '__main__':
         lp = 0.0
         if epoch % 3 == 0:
             for t_idx, training_instance in enumerate(test_instances):
+                continue
                 j_ti = json.loads(training_instance)
                 ti = TrainingInstance.from_dict(j_ti)
 
@@ -232,13 +233,14 @@ if __name__ == '__main__':
                 fg.treelike_inference(3)
                 lp += fg.get_posterior_probs()
                 # print t_idx
-                fg.get_max_postior_label(top=5)
+                # fg.get_max_postior_label(top=5)
                 # print '...'
             print 'log sum of posteriors probs for subervised labels:', lp
         load_times = []
         grad_times = []
         grad_times_per_factor = []
         inference_times = []
+        st_time = time.time()
         random.shuffle(all_training_instances)
         for t_idx, training_instance in enumerate(all_training_instances):
             sys.stderr.write('.')
@@ -267,5 +269,6 @@ if __name__ == '__main__':
         print 'ave  grad time per factor:', sum(grad_times_per_factor) / float(len(grad_times_per_factor))
         print 'cell grad time per factor:', sum(fg.cg_times) / float(len(fg.cg_times))
         print 'grad grad time per factor:', sum(fg.gg_times) / float(len(fg.gg_times))
+        print 'epoch time taken:', time.time() - st_time
         lr *= 0.5
     print 'theta final:', fg.theta_en_de, fg.theta_en_en
