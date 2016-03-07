@@ -83,7 +83,7 @@ def load_fg(fg, ti, en_domain, de2id, en2id):
             raise BaseException("vars are given or predicted only (no latent)")
 
     for idx_1, (v1, simplenode_1) in enumerate(var_node_pairs):
-        for idx_2, (v2, simplenode_2) in enumerate(var_node_pairs[idx_1 + 1:idx_1 + 2]):
+        for idx_2, (v2, simplenode_2) in enumerate(var_node_pairs[idx_1 + 1:]):
             if v1.var_type == VAR_TYPE_PREDICTED and v2.var_type == VAR_TYPE_PREDICTED:
                 f = FactorNode(id=len(factors), factor_type='en_en')
                 p = PotentialTable(v_id2dim={v1.id: 0, v2.id: 1}, table=None, observed_dim=None)
@@ -186,35 +186,37 @@ if __name__ == '__main__':
     inference_times = []
     mp_times = []
     fg = None
-    test_instances = training_instances[:10]
-    all_training_instances = training_instances[10:]
+    split_ratio = int(len(training_instances) * 0.33)
+    test_instances = training_instances[:split_ratio]
+    all_training_instances = training_instances[split_ratio:]
     lr = 0.1
     for epoch in range(10):
         print 'epoch', epoch
         lp = 0.0
-        for t_idx, training_instance in enumerate(training_instances[:10]):
-            j_ti = json.loads(training_instance)
-            ti = TrainingInstance.from_dict(j_ti)
-            lt = time.time()
-            fg = FactorGraph(theta_en_en=f_en_en_theta if fg is None else fg.theta_en_en,
-                             theta_en_de=f_en_de_theta if fg is None else fg.theta_en_de,
-                             phi_en_en=phi_en_en,
-                             phi_en_de=phi_en_de)
+        if epoch % 3 == 0:
+            for t_idx, training_instance in enumerate(test_instances):
+                j_ti = json.loads(training_instance)
+                ti = TrainingInstance.from_dict(j_ti)
+                lt = time.time()
+                fg = FactorGraph(theta_en_en=f_en_en_theta if fg is None else fg.theta_en_en,
+                                 theta_en_de=f_en_de_theta if fg is None else fg.theta_en_de,
+                                 phi_en_en=phi_en_en,
+                                 phi_en_de=phi_en_de)
 
-            fg = load_fg(fg, ti, en_domain, de2id=de2id, en2id=en2id)
-            load_times.append(time.time() - lt)
-            mp = time.time()
-            for f in fg.factors:
-                f.potential_table.make_potentials()  # can this be made faster??
-            mp_times.append(time.time() - mp)
-            it = time.time()
-            fg.initialize()
-            fg.treelike_inference(3)
-            lp += fg.get_posterior_probs()
-            # print t_idx
-            # fg.get_max_postior_label(top=5)
-            # print '...'
-        print 'log sum of posteriors probs for subervised labels:', lp
+                fg = load_fg(fg, ti, en_domain, de2id=de2id, en2id=en2id)
+                load_times.append(time.time() - lt)
+                mp = time.time()
+                for f in fg.factors:
+                    f.potential_table.make_potentials()  # can this be made faster??
+                mp_times.append(time.time() - mp)
+                it = time.time()
+                fg.initialize()
+                fg.treelike_inference(3)
+                lp += fg.get_posterior_probs()
+                # print t_idx
+                fg.get_max_postior_label(top=5)
+                # print '...'
+            print 'log sum of posteriors probs for subervised labels:', lp
         random.shuffle(all_training_instances)
         for t_idx, training_instance in enumerate(all_training_instances):
             sys.stderr.write('.')
