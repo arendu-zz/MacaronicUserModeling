@@ -99,7 +99,7 @@ def load_fg(fg, ti, en_domain, de2id, en2id):
         fg.add_factor(f)
 
     for f in fg.factors:
-        f.potential_table.make_potentials()
+        f.potential_table.slice_potentials()
     return fg
 
 

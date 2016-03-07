@@ -10,6 +10,7 @@ from LBP import FactorNode, FactorGraph, VariableNode, VAR_TYPE_PREDICTED, Poten
 import time
 import codecs
 from numpy import float32 as DTYPE
+from scipy import sparse
 
 np.seterr(divide='raise', over='raise', under='ignore')
 
@@ -82,6 +83,10 @@ def load_fg(fg, ti, en_domain, de2id, en2id):
     pot_en_de = fg.phi_en_de.dot(fg.theta_en_de.T)
     pot_en_de = np.exp(pot_en_de)
     fg.pot_en_de = pot_en_de
+
+    # covert to csr
+    fg.phi_en_de_csc = sparse.csc_matrix(fg.phi_en_de)
+    fg.phi_en_en_csc = sparse.csc_matrix(fg.phi_en_en)
 
     # create Ve x Vg factors
     for v, simplenode in var_node_pairs:
@@ -170,6 +175,7 @@ if __name__ == '__main__':
     phi_en_en1 = np.loadtxt(options.phi_wiwj)
     if make_phi_sparse:
         phi_en_en1[phi_en_en1 < 1.0 / len(en_domain)] = 0.0  # make sparse...
+
     phi_en_en1 = np.reshape(phi_en_en1, (len(en_domain) * len(en_domain), 1))
     ss = np.shape(phi_en_en1)
     phi_en_en2 = np.random.rand(ss[0], ss[1])
@@ -177,10 +183,6 @@ if __name__ == '__main__':
         phi_en_en2[phi_en_en2 < 0.5] = 0
     phi_en_en = np.concatenate((phi_en_en1, phi_en_en2), axis=1)
     phi_en_en.astype(DTYPE)
-    # phi_en_en = np.random.rand(len(en_domain) * len(en_domain), len(f_en_en))
-    # phi_en_en[phi_en_en > 0.8] = 1.0
-    # phi_en_en[phi_en_en < 1.0] = 0.0
-    # pre_fire_en_en = sparse.csr_matrix(pre_fire_en_en)
 
     f_en_de = ['x', 'y', 'dummy_ef', 'history']
     # f_en_de_theta = np.random.rand(1, len(f_en_de)) - 0.5  # zero mean random values
@@ -206,8 +208,8 @@ if __name__ == '__main__':
 
     fg = None
     split_ratio = int(len(training_instances) * 0.33)
-    test_instances = training_instances[:split_ratio]
-    all_training_instances = training_instances[split_ratio:]
+    test_instances = training_instances[:10]
+    all_training_instances = training_instances[10:50]
     lr = 0.1
     for epoch in range(10):
         print 'epoch', epoch
@@ -235,6 +237,7 @@ if __name__ == '__main__':
             print 'log sum of posteriors probs for subervised labels:', lp
         load_times = []
         grad_times = []
+        grad_times_per_factor = []
         inference_times = []
         random.shuffle(all_training_instances)
         for t_idx, training_instance in enumerate(all_training_instances):
@@ -257,8 +260,12 @@ if __name__ == '__main__':
             gt = time.time()
             fg.update_theta()
             grad_times.append(time.time() - gt)
+            grad_times_per_factor.append((time.time() - gt) / len(fg.factors))
         print '\nave load times:', sum(load_times) / float(len(load_times))
         print 'ave inf times :', sum(inference_times) / float(len(inference_times))
         print 'ave grad times:', sum(grad_times) / float(len(grad_times))
+        print 'ave  grad time per factor:', sum(grad_times_per_factor) / float(len(grad_times_per_factor))
+        print 'cell grad time per factor:', sum(fg.cg_times) / float(len(fg.cg_times))
+        print 'grad grad time per factor:', sum(fg.gg_times) / float(len(fg.gg_times))
         lr *= 0.5
     print 'theta final:', fg.theta_en_de, fg.theta_en_en
