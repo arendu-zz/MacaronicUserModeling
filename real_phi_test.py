@@ -206,8 +206,8 @@ if __name__ == '__main__':
 
     fg = None
     split_ratio = int(len(training_instances) * 0.33)
-    test_instances = training_instances[:split_ratio]
-    all_training_instances = training_instances[split_ratio:]
+    test_instances = training_instances[:50]
+    all_training_instances = training_instances[50:150]
     lr = 0.1
     for epoch in range(10):
         print 'epoch', epoch
