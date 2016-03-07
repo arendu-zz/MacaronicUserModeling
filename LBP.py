@@ -19,6 +19,8 @@ class FactorGraph():
         self.theta_en_de = theta_en_de
         self.phi_en_en = phi_en_en
         self.phi_en_de = phi_en_de
+        self.pot_en_en = None
+        self.pot_en_de = None
         self.variables = {}
         self.factors = []
         self.messages = {}
@@ -288,6 +290,14 @@ class FactorNode():
         ptable.add_factor(self)
         self.potential_table = ptable
 
+    def get_pot(self):
+        if self.factor_type == 'en_en':
+            return self.graph.pot_en_en
+        elif self.factor_type == 'en_de':
+            return self.graph.pot_en_de
+        else:
+            raise BaseException("only two kinds of potentials are supported...")
+
     def get_theta(self):
         if self.factor_type == 'en_en':
             return self.graph.theta_en_en
@@ -468,13 +478,16 @@ class PotentialTable():
         else:
             pass
 
-    def make_potentials(self):
+    def slice_potentials(self):
         # table = np.exp(np.multiply(self.factor.get_theta(), self.factor.get_phi()))
         # table = np.sum(table, 1)
-        table = self.factor.get_phi().dot(self.factor.get_theta().T)  # todo: this line is very very slow!!!!
-        table = np.exp(table)
+        # table = self.factor.get_phi().dot(self.factor.get_theta().T)  # todo: this line is very very slow!!!!
+        # table = np.exp(table)
+        table = self.factor.get_pot()
+        # assert np.allclose(table_from_pot, table)
         table_shape = self.factor.get_shape()
         table = np.reshape(table, table_shape)
+
         if self.observed_dim is not None:
             table = np.reshape(table[:, self.observed_dim], (np.shape(table)[0], 1))
         else:

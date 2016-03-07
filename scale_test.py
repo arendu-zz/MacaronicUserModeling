@@ -93,7 +93,7 @@ if __name__ == '__main__':
             fg.add_factor(f)
 
         for f in fg.factors:
-            f.potential_table.make_potentials()
+            f.potential_table.slice_potentials()
 
         # print en_de_pot
         # print en_en_pot

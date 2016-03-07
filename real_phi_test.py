@@ -74,6 +74,15 @@ def load_fg(fg, ti, en_domain, de2id, en2id):
     history_feature = np.reshape(history_feature, (np.shape(fg.phi_en_de)[0],))
     fg.phi_en_de[:, -1] = history_feature
 
+    # table = self.factor.get_phi().dot(self.factor.get_theta().T)  # todo: this line is very very slow!!!!
+    pot_en_en = fg.phi_en_en.dot(fg.theta_en_en.T)
+    pot_en_en = np.exp(pot_en_en)
+    fg.pot_en_en = pot_en_en
+
+    pot_en_de = fg.phi_en_de.dot(fg.theta_en_de.T)
+    pot_en_de = np.exp(pot_en_de)
+    fg.pot_en_de = pot_en_de
+
     # create Ve x Vg factors
     for v, simplenode in var_node_pairs:
         if v.var_type == VAR_TYPE_PREDICTED:
@@ -111,6 +120,9 @@ def load_fg(fg, ti, en_domain, de2id, en2id):
 
     for f in factors:
         fg.add_factor(f)
+
+    for f in fg.factors:
+        f.potential_table.slice_potentials()
 
     return fg
 
@@ -213,7 +225,7 @@ if __name__ == '__main__':
                 fg = load_fg(fg, ti, en_domain, de2id=de2id, en2id=en2id)
 
                 for f in fg.factors:
-                    f.potential_table.make_potentials()  # can this be made faster??
+                    f.potential_table.slice_potentials()  # can this be made faster??
                 fg.initialize()
                 fg.treelike_inference(3)
                 lp += fg.get_posterior_probs()
@@ -224,7 +236,6 @@ if __name__ == '__main__':
         load_times = []
         grad_times = []
         inference_times = []
-        mp_times = []
         random.shuffle(all_training_instances)
         for t_idx, training_instance in enumerate(all_training_instances):
             sys.stderr.write('.')
@@ -239,10 +250,6 @@ if __name__ == '__main__':
 
             fg = load_fg(fg, ti, en_domain, de2id=de2id, en2id=en2id)
             load_times.append(time.time() - lt)
-            mp = time.time()
-            for f in fg.factors:
-                f.potential_table.make_potentials()  # can this be made faster??
-            mp_times.append(time.time() - mp)
             it = time.time()
             fg.initialize()
             fg.treelike_inference(3)
@@ -250,8 +257,7 @@ if __name__ == '__main__':
             gt = time.time()
             fg.update_theta()
             grad_times.append(time.time() - gt)
-        print 'ave load times:', sum(load_times) / float(len(load_times))
-        print 'ave mp times  :', sum(mp_times) / float(len(mp_times))
+        print '\nave load times:', sum(load_times) / float(len(load_times))
         print 'ave inf times :', sum(inference_times) / float(len(inference_times))
         print 'ave grad times:', sum(grad_times) / float(len(grad_times))
         lr *= 0.5
