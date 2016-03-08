@@ -4,6 +4,13 @@ from scipy import sparse
 import time
 
 if __name__ == '__main__':
+
+    a = np.random.randint(0, 10, (10,))
+    kkk = [np.argpartition(a, -3)][-3:]
+    print a
+    print kkk
+
+    print 'pok'
     feature_size = 5
     for d in [500, 1000, 2000, 5000]:
         domain_size = d
