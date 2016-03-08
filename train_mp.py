@@ -182,6 +182,7 @@ if __name__ == '__main__':
     opt.add_option('--phi_wiwj', dest='phi_wiwj', default='')
     opt.add_option('--phi_ed', dest='phi_ed', default='')
     opt.add_option('--phi_ped', dest='phi_ped', default='')
+    opt.add_option('--cpu', dest='cpus', default='')
     (options, _) = opt.parse_args()
 
     if options.training_instances == '' or options.en_domain == '' or options.de_domain == '' or options.phi_wiwj == '' or options.phi_ed == '' or options.phi_ped == '':
@@ -192,12 +193,13 @@ if __name__ == '__main__':
             --ded [de domain file]\n \
             --phi_wiwj [wiwj file]\n \
             --phi_ed [ed file]\n \
-            --phi_ped [ped file]\n')
+            --phi_ped [ped file]\n'
+            '--cpu [4 by default]\n')
         exit(1)
     else:
         pass
     print 'reading in  ti and domains...'
-
+    cpu_count = 4 if options.cpus.strip() == '' else int(options.cpus)
     training_instances = codecs.open(options.training_instances).readlines()
     de_domain = [i.strip() for i in codecs.open(options.de_domain, 'r', 'utf8').readlines()]
     en_domain = [i.strip() for i in codecs.open(options.en_domain, 'r', 'utf8').readlines()]
@@ -245,7 +247,6 @@ if __name__ == '__main__':
     test_instances = training_instances[:10]
     all_training_instances = training_instances[10:]
 
-    cpu_count = 4
     for epoch in range(2):
         lr = 0.1
         print 'epoch:', epoch, 'theta:', f_en_en_theta, f_en_de_theta
