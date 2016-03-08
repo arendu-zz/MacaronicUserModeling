@@ -224,8 +224,10 @@ if __name__ == '__main__':
         exit(1)
     else:
         pass
-    print 'reading in  ti and domains...'
+
     cpu_count = 4 if options.cpus.strip() == '' else int(options.cpus)
+    print 'cpu count:', cpu_count
+    print 'reading in  ti and domains...'
     training_instances = codecs.open(options.training_instances).readlines()
     t_now = '-'.join(ctime().split())
     writer = open(options.training_instances+'.'+t_now+'.model.params', 'w')
