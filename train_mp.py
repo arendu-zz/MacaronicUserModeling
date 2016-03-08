@@ -14,7 +14,6 @@ from scipy import sparse
 import multiprocessing
 import traceback
 from multiprocessing import Pool
-import sharedmem
 
 global f_en_en_theta, f_en_de_theta
 np.seterr(divide='raise', over='raise', under='ignore')
