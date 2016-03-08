@@ -13,7 +13,7 @@ from numpy import float32 as DTYPE
 from scipy import sparse
 from multiprocessing import Pool
 
-global f_en_en_theta, f_en_de_theta, prediction_probs
+global f_en_en_theta, f_en_de_theta
 np.seterr(divide='raise', over='raise', under='ignore')
 
 np.set_printoptions(precision=4, suppress=True)
@@ -135,7 +135,7 @@ def create_factor_graph(ti, learning_rate, theta_en_en, theta_en_de, phi_en_en, 
     return fg
 
 
-def batch_predictions(training_instance, theta_en_en, theta_en_de, phi_en_en, phi_en_de, lr, en_domain, de2id, en2id):
+def batch_check(training_instance, theta_en_en, theta_en_de, phi_en_en, phi_en_de, lr, en_domain, de2id, en2id):
     j_ti = json.loads(training_instance)
     ti = TrainingInstance.from_dict(j_ti)
     sent_id = ti.current_sent[0].sent_id
@@ -152,51 +152,16 @@ def batch_predictions(training_instance, theta_en_en, theta_en_de, phi_en_en, ph
                              en2id=en2id)
 
     fg.initialize()
-    fg.treelike_inference(3)
-    return fg.get_posterior_probs()
+    # fg.treelike_inference(3)
+    return sent_id
 
 
-def batch_prediction_probs_accumulate(p):
-    global prediction_probs
-    prediction_probs += p
-
-
-def batch_sgd(training_instance, theta_en_en, theta_en_de, phi_en_en, phi_en_de, lr, en_domain, de2id, en2id):
-    j_ti = json.loads(training_instance)
-    ti = TrainingInstance.from_dict(j_ti)
-    sent_id = ti.current_sent[0].sent_id
-    # sys.stderr.write('sent id:' + str(sent_id))
-    # print 'in:', sent_id, theta_en_en, theta_en_de
-    fg = create_factor_graph(ti=ti,
-                             learning_rate=lr,
-                             theta_en_de=theta_en_de,
-                             theta_en_en=theta_en_en,
-                             phi_en_en=phi_en_en,
-                             phi_en_de=phi_en_de,
-                             en_domain=en_domain,
-                             de2id=de2id,
-                             en2id=en2id)
-
-    fg.initialize()
-    # sys.stderr.write('.')
-    fg.treelike_inference(3)
-    # sys.stderr.write('.')
-    # f_en_en_theta, f_en_de_theta = fg.update_theta()
-    g_en_en, g_en_de = fg.return_gradient()
-    # print 'out', g_en_en, g_en_de
-    # sys.stderr.write('.\n')
-    return [sent_id, g_en_en, g_en_de]
-
-
-def batch_sgd_accumulate(result):
-    global f_en_en_theta, f_en_de_theta
-    f_en_en_theta += result[1]
-    f_en_de_theta += result[2]
-    # print 'received', result[0], f_en_en_theta, f_en_de_theta
+def batch_check_accumulate(p):
+    print 'completed', p
 
 
 if __name__ == '__main__':
-    global f_en_en_theta, f_en_de_theta, prediction_probs
+    global f_en_en_theta, f_en_de_theta
 
     opt = OptionParser()
     # insert options here
@@ -266,15 +231,10 @@ if __name__ == '__main__':
     phi_en_de4 = np.zeros_like(phi_en_de1)
     phi_en_de = np.concatenate((phi_en_de1, phi_en_de2, phi_en_de3, phi_en_de4), axis=1)
     phi_en_de.astype(DTYPE)
-
-    split_ratio = int(len(training_instances) * 0.1)
-    test_instances = training_instances[:split_ratio]
-    all_training_instances = training_instances[split_ratio:]
-    prediction_probs = 0.0
     lr = 0.1
     pool = Pool(processes=cpu_count)
-    for ti in test_instances:
-        pool.apply_async(batch_predictions, args=(
+    for ti in training_instances:
+        pool.apply_async(batch_check, args=(
             ti,
             f_en_en_theta,
             f_en_de_theta,
@@ -282,42 +242,7 @@ if __name__ == '__main__':
             phi_en_de, lr,
             en_domain,
             de2id,
-            en2id), callback=batch_prediction_probs_accumulate)
+            en2id), callback=batch_check_accumulate)
     pool.close()
     pool.join()
-    print '\nprediction probs:', prediction_probs
-    for epoch in range(2):
-        lr = 0.1
-        print 'epoch:', epoch, 'theta:', f_en_en_theta, f_en_de_theta
-        random.shuffle(all_training_instances)
-        pool = Pool(processes=cpu_count)
-        for ti in all_training_instances:
-            pool.apply_async(batch_sgd, args=(
-                ti,
-                f_en_en_theta,
-                f_en_de_theta,
-                phi_en_en,
-                phi_en_de, lr,
-                en_domain,
-                de2id,
-                en2id), callback=batch_sgd_accumulate)
-        pool.close()
-        pool.join()
-        print '\nepoch:', epoch, f_en_en_theta, f_en_de_theta
-        prediction_probs = 0.0
-        pool = Pool(processes=cpu_count)
-        for ti in test_instances:
-            pool.apply_async(batch_predictions, args=(
-                ti,
-                f_en_en_theta,
-                f_en_de_theta,
-                phi_en_en,
-                phi_en_de, lr,
-                en_domain,
-                de2id,
-                en2id), callback=batch_prediction_probs_accumulate)
-        pool.close()
-        pool.join()
-        lr *= 0.5
-        print '\nprediction probs:', prediction_probs
-print '\ntheta final:', f_en_en_theta, f_en_de_theta
+    print 'done.'
