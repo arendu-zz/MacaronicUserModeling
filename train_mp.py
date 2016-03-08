@@ -8,12 +8,14 @@ import sys
 from optparse import OptionParser
 from LBP import FactorNode, FactorGraph, VariableNode, VAR_TYPE_PREDICTED, PotentialTable, VAR_TYPE_GIVEN
 import time
+from time import ctime
 import codecs
 from numpy import float32 as DTYPE
 from scipy import sparse
 from multiprocessing import Pool
 
-global f_en_en_theta, f_en_de_theta, prediction_probs
+global f_en_en_theta, f_en_de_theta, prediction_probs, writer, n_up
+n_up = 0
 np.seterr(divide='raise', over='raise', under='ignore')
 
 np.set_printoptions(precision=4, suppress=True)
@@ -188,11 +190,15 @@ def batch_sgd_accumulate(result):
     global f_en_en_theta, f_en_de_theta
     f_en_en_theta += result[1]
     f_en_de_theta += result[2]
+    if n_up % 100 == 0:
+        writer.write(np.array_str(f_en_en_theta) + ' ' + np.array_str(f_en_de_theta) +'\n')
+        writer.flush()
+    n_up+=1
     # print 'received', result[0], f_en_en_theta, f_en_de_theta
 
 
 if __name__ == '__main__':
-    global f_en_en_theta, f_en_de_theta, prediction_probs
+    global f_en_en_theta, f_en_de_theta, prediction_probs, writer, n_up
 
     opt = OptionParser()
     # insert options here
@@ -221,6 +227,8 @@ if __name__ == '__main__':
     print 'reading in  ti and domains...'
     cpu_count = 4 if options.cpus.strip() == '' else int(options.cpus)
     training_instances = codecs.open(options.training_instances).readlines()
+    t_now = '-'.join(ctime().split())
+    writer = open(options.training_instances+'.'+t_now+'.model.params', 'w')
     de_domain = [i.strip() for i in codecs.open(options.de_domain, 'r', 'utf8').readlines()]
     en_domain = [i.strip() for i in codecs.open(options.en_domain, 'r', 'utf8').readlines()]
     en2id = dict((e, idx) for idx, e in enumerate(en_domain))
@@ -282,8 +290,8 @@ if __name__ == '__main__':
     pool.close()
     pool.join()
     print '\nprediction probs:', prediction_probs
-    for epoch in range(2):
-        lr = 0.1
+    for epoch in range(1):
+        lr = 0.05
         print 'epoch:', epoch, 'theta:', f_en_en_theta, f_en_de_theta
         random.shuffle(all_training_instances)
         pool = Pool(processes=cpu_count)
