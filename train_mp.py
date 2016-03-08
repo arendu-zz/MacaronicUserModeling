@@ -35,7 +35,7 @@ def get_var_node_pair(sorted_current_sent, current_guesses, current_revealed, en
     for idx, simplenode in enumerate(sorted_current_sent):
         if simplenode.lang == 'en':
             v = VariableNode(id=idx, var_type=VAR_TYPE_GIVEN, domain_type='en', domain=en_domain,
-                             supervised_label=simplenode.l2_word)
+                    supervised_label=simplenode.l2_word)
 
         else:
             guess = find_guess(simplenode.id, current_guesses)
@@ -47,9 +47,9 @@ def get_var_node_pair(sorted_current_sent, current_guesses, current_revealed, en
             assert guess is not None
             try:
                 v = VariableNode(id=idx, var_type=var_type,
-                                 domain_type='en',
-                                 domain=en_domain,
-                                 supervised_label=guess.guess)
+                        domain_type='en',
+                        domain=en_domain,
+                        supervised_label=guess.guess)
 
             except AssertionError:
                 print 'something bad...'
@@ -66,9 +66,9 @@ def create_factor_graph(ti, learning_rate, theta_en_en, theta_en_de, phi_en_en, 
     len_en_domain = len(en_domain)
     len_de_domain = len(de_domain)
     fg = FactorGraph(theta_en_en=theta_en_en,
-                     theta_en_de=theta_en_de,
-                     phi_en_en=phi_en_en,
-                     phi_en_de=phi_en_de)
+            theta_en_de=theta_en_de,
+            phi_en_en=phi_en_en,
+            phi_en_de=phi_en_de)
     fg.learning_rate = learning_rate
 
     history_feature = np.zeros((len_en_domain, len_de_domain))
@@ -120,9 +120,9 @@ def create_factor_graph(ti, learning_rate, theta_en_en, theta_en_de, phi_en_en, 
                 v_given = v1 if v1.var_type == VAR_TYPE_GIVEN else v2
                 v_pred = v1 if v1.var_type == VAR_TYPE_PREDICTED else v2
                 f = FactorNode(id=len(factors),
-                               factor_type='en_en',
-                               observed_domain_type='en',
-                               observed_domain_size=len_en_domain)
+                        factor_type='en_en',
+                        observed_domain_type='en',
+                        observed_domain_size=len_en_domain)
                 o_idx = en2id[v_given.supervised_label]  # either a users guess OR a revealed word -> see line 31,36
                 p = PotentialTable(v_id2dim={v_pred.id: 0}, table=None, observed_dim=o_idx)
                 f.add_varset_with_potentials(varset=[v_pred], ptable=p)
@@ -144,14 +144,14 @@ def batch_predictions(training_instance, theta_en_en, theta_en_de, phi_en_en, ph
     # sys.stderr.write('sent id:' + str(sent_id))
     # print 'in:', sent_id, theta_en_en, theta_en_de
     fg = create_factor_graph(ti=ti,
-                             learning_rate=lr,
-                             theta_en_de=theta_en_de,
-                             theta_en_en=theta_en_en,
-                             phi_en_en=phi_en_en,
-                             phi_en_de=phi_en_de,
-                             en_domain=en_domain,
-                             de2id=de2id,
-                             en2id=en2id)
+            learning_rate=lr,
+            theta_en_de=theta_en_de,
+            theta_en_en=theta_en_en,
+            phi_en_en=phi_en_en,
+            phi_en_de=phi_en_de,
+            en_domain=en_domain,
+            de2id=de2id,
+            en2id=en2id)
 
     fg.initialize()
     fg.treelike_inference(3)
@@ -165,21 +165,21 @@ def batch_prediction_probs_accumulate(p):
         writer.write(str(n_up) +' pred prob:' + str(prediction_probs) +'\n')
         writer.flush()
     n_up+=1
- 
+
 
 def batch_sgd(training_instance, theta_en_en, theta_en_de, phi_en_en, phi_en_de, lr, en_domain, de2id, en2id):
     j_ti = json.loads(training_instance)
     ti = TrainingInstance.from_dict(j_ti)
     sent_id = ti.current_sent[0].sent_id
     fg = create_factor_graph(ti=ti,
-                             learning_rate=lr,
-                             theta_en_de=theta_en_de,
-                             theta_en_en=theta_en_en,
-                             phi_en_en=phi_en_en,
-                             phi_en_de=phi_en_de,
-                             en_domain=en_domain,
-                             de2id=de2id,
-                             en2id=en2id)
+            learning_rate=lr,
+            theta_en_de=theta_en_de,
+            theta_en_en=theta_en_en,
+            phi_en_en=phi_en_en,
+            phi_en_de=phi_en_de,
+            en_domain=en_domain,
+            de2id=de2id,
+            en2id=en2id)
 
     fg.initialize()
     # sys.stderr.write('.')
@@ -217,14 +217,14 @@ if __name__ == '__main__':
 
     if options.training_instances == '' or options.en_domain == '' or options.de_domain == '' or options.phi_wiwj == '' or options.phi_ed == '' or options.phi_ped == '':
         sys.stderr.write(
-            'Usage: python real_phi_test.py\n\
-            --ti [training instance file]\n \
-            --end [en domain file]\n \
-            --ded [de domain file]\n \
-            --phi_wiwj [wiwj file]\n \
-            --phi_ed [ed file]\n \
-            --phi_ped [ped file]\n'
-            '--cpu [4 by default]\n')
+                'Usage: python real_phi_test.py\n\
+                        --ti [training instance file]\n \
+                        --end [en domain file]\n \
+                        --ded [de domain file]\n \
+                        --phi_wiwj [wiwj file]\n \
+                        --phi_ed [ed file]\n \
+                        --phi_ped [ped file]\n'
+                        '--cpu [4 by default]\n')
         exit(1)
     else:
         pass
@@ -234,7 +234,8 @@ if __name__ == '__main__':
     print 'reading in  ti and domains...'
     training_instances = codecs.open(options.training_instances).readlines()
     t_now = '-'.join(ctime().split())
-    writer = open(options.training_instances+'.'+t_now+'.model.params', 'w')
+    model_param_writer_name = options.training_instances +'.cpu'+str(cpu_count)+'.'+t_now+'.params'
+    writer = open(model_param_writer_name, 'w')
     de_domain = [i.strip() for i in codecs.open(options.de_domain, 'r', 'utf8').readlines()]
     en_domain = [i.strip() for i in codecs.open(options.en_domain, 'r', 'utf8').readlines()]
     en2id = dict((e, idx) for idx, e in enumerate(en_domain))
@@ -243,7 +244,7 @@ if __name__ == '__main__':
     # en_domain = ['en_' + str(i) for i in range(500)]
     # de_domain = ['de_' + str(i) for i in range(100)]
     print 'read ti and domains...'
-    f_en_en = ['f1', 'dummy_ee']
+    f_en_en = ['f1']
 
     # f_en_en_theta = np.random.rand(1, len(f_en_en)) - 0.5  # zero mean random values
     f_en_en_theta = np.zeros((1, len(f_en_en)))
@@ -253,12 +254,10 @@ if __name__ == '__main__':
     print np.count_nonzero(phi_en_en1)
     phi_en_en1 = np.reshape(phi_en_en1, (len(en_domain) * len(en_domain), 1))
     ss = np.shape(phi_en_en1)
-    phi_en_en2 = np.random.rand(ss[0], ss[1])
-    phi_en_en2[phi_en_en2 < 0.5] = 0
-    phi_en_en = np.concatenate((phi_en_en1, phi_en_en2), axis=1)
+    phi_en_en = np.concatenate((phi_en_en1,), axis=1)
     phi_en_en.astype(DTYPE)
 
-    f_en_de = ['x', 'y', 'dummy_ef', 'history']
+    f_en_de = ['ed', 'ped', 'history']
     # f_en_de_theta = np.random.rand(1, len(f_en_de)) - 0.5  # zero mean random values
     f_en_de_theta = np.zeros((1, len(f_en_de)))
     print 'reading phi ed'
@@ -270,11 +269,8 @@ if __name__ == '__main__':
     phi_en_de2 = np.loadtxt(options.phi_ped)
     phi_en_de2[phi_en_de2 < 0.5] = 0.0
     phi_en_de2 = np.reshape(phi_en_de2, (len(en_domain) * len(de_domain), 1))
-    ss = np.shape(phi_en_de2)
-    phi_en_de3 = np.random.rand(ss[0], ss[1])
-    phi_en_de3[phi_en_de3 < 0.5] = 0
-    phi_en_de4 = np.zeros_like(phi_en_de1)
-    phi_en_de = np.concatenate((phi_en_de1, phi_en_de2, phi_en_de3, phi_en_de4), axis=1)
+    phi_en_de3 = np.zeros_like(phi_en_de1)
+    phi_en_de = np.concatenate((phi_en_de1, phi_en_de2, phi_en_de3), axis=1)
     phi_en_de.astype(DTYPE)
 
     split_ratio = int(len(training_instances) * 0.1)
@@ -296,7 +292,7 @@ if __name__ == '__main__':
     pool.close()
     pool.join()
     print '\nprediction probs:', prediction_probs
-    for epoch in range(1):
+    for epoch in range(2):
         lr = 0.05
         print 'epoch:', epoch, 'theta:', f_en_en_theta, f_en_de_theta
         random.shuffle(all_training_instances)
