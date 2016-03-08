@@ -159,9 +159,13 @@ def batch_predictions(training_instance, theta_en_en, theta_en_de, phi_en_en, ph
 
 
 def batch_prediction_probs_accumulate(p):
-    global prediction_probs
+    global prediction_probs, n_up
     prediction_probs += p
-
+    if n_up % 10 == 0:
+        writer.write(str(n_up) +' pred prob:' + str(prediction_probs) +'\n')
+        writer.flush()
+    n_up+=1
+ 
 
 def batch_sgd(training_instance, theta_en_en, theta_en_de, phi_en_en, phi_en_de, lr, en_domain, de2id, en2id):
     j_ti = json.loads(training_instance)
@@ -187,11 +191,11 @@ def batch_sgd(training_instance, theta_en_en, theta_en_de, phi_en_en, phi_en_de,
 
 
 def batch_sgd_accumulate(result):
-    global f_en_en_theta, f_en_de_theta
+    global f_en_en_theta, f_en_de_theta, n_up
     f_en_en_theta += result[1]
     f_en_de_theta += result[2]
-    if n_up % 100 == 0:
-        writer.write(np.array_str(f_en_en_theta) + ' ' + np.array_str(f_en_de_theta) +'\n')
+    if n_up % 10 == 0:
+        writer.write(str(n_up) +' '+ np.array_str(f_en_en_theta) + ' ' + np.array_str(f_en_de_theta) +'\n')
         writer.flush()
     n_up+=1
     # print 'received', result[0], f_en_en_theta, f_en_de_theta
