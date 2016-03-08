@@ -190,7 +190,13 @@ class FactorGraph():
         grad_en_de, grad_en_en = self.get_gradient()
         self.theta_en_en += (self.learning_rate * grad_en_en)
         self.theta_en_de += (self.learning_rate * grad_en_de)
-        # print '                   new theta:', self.theta_en_de, self.theta_en_en
+        return self.theta_en_en, self.theta_en_de
+
+    def return_gradient(self):
+        grad_en_de, grad_en_en = self.get_gradient()
+        g_en_en = self.learning_rate * grad_en_en
+        g_en_de = self.learning_rate * grad_en_de
+        return g_en_en, g_en_de
 
 
 class VariableNode():
@@ -372,6 +378,7 @@ class FactorNode():
         # takes the last messages coming into this factor
         # normalizes the messages
         # multiplies it into a matrix with same dim as the potentials
+
         r = None
         c = None
         if len(self.varset) == 1:
@@ -390,8 +397,8 @@ class FactorNode():
                 else:
                     raise NotImplementedError("only supports pairwise factors..")
             marignals = array_utils.dd_matrix_multiply(c, r)  # np.dot(c, r)
-        # beliefs = np.multiply(marignals, self.potential_table.table)
-        beliefs = array_utils.induce_s_pointwise_multiply_clip(marignals, self.potential_table.table, k=1)
+        beliefs = np.multiply(marignals, self.potential_table.table)  # O(n)
+        # beliefs = array_utils.induce_s_pointwise_multiply_clip(marignals, self.potential_table.table, k=1) #O(n)
         beliefs = array_utils.normalize(beliefs)
         return beliefs
 
@@ -424,10 +431,6 @@ class FactorNode():
         # grad_approx = array_utils.induce_s_mutliply_clip(f_ij, self.get_phi().T, k=1000)
         # grad1 = grad_approx.T
         # if __debug__: assert  np.allclose(grad1, grad2.T)
-        '''on_the_fly_feature_values = self.get_on_the_fly_feature_values()
-        grad2 = on_the_fly_feature_values * f_ij
-        fg = np.concatenate((grad1, grad2), axis=1)'''
-
         self.graph.gg_times.append(time.time() - gg)
         return grad1
 
@@ -501,10 +504,6 @@ class PotentialTable():
             pass
 
     def slice_potentials(self):
-        # table = np.exp(np.multiply(self.factor.get_theta(), self.factor.get_phi()))
-        # table = np.sum(table, 1)
-        # table = self.factor.get_phi().dot(self.factor.get_theta().T)  # todo: this line is very very slow!!!!
-        # table = np.exp(table)
         table = self.factor.get_pot()
         # if __debug__: assert  np.allclose(table_from_pot, table)
         table_shape = self.factor.get_shape()

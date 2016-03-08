@@ -208,18 +208,38 @@ if __name__ == '__main__':
 
     fg = None
     split_ratio = int(len(training_instances) * 0.33)
-    test_instances = training_instances[:10]
-    all_training_instances = training_instances[10:25]
+    test_instances = training_instances[:split_ratio]
+    all_training_instances = training_instances[split_ratio:]
     lr = 0.1
-    for epoch in range(1):
+    for epoch in range(3):
         print 'epoch', epoch
         lp = 0.0
+        if epoch  == 0 or epoch == 2:
+            for t_idx, training_instance in enumerate(test_instances):
+                j_ti = json.loads(training_instance)
+                ti = TrainingInstance.from_dict(j_ti)
+
+                fg = FactorGraph(theta_en_en=f_en_en_theta if fg is None else fg.theta_en_en,
+                                 theta_en_de=f_en_de_theta if fg is None else fg.theta_en_de,
+                                 phi_en_en=phi_en_en,
+                                 phi_en_de=phi_en_de)
+
+                fg = load_fg(fg, ti, en_domain, de2id=de2id, en2id=en2id)
+
+                for f in fg.factors:
+                    f.potential_table.slice_potentials()  # can this be made faster??
+                fg.initialize()
+                fg.treelike_inference(3)
+                lp += fg.get_posterior_probs()
+                # print t_idx
+                fg.get_max_postior_label(top=15)
+            print 'log sum of posteriors probs for subervised labels:', lp
         load_times = []
         grad_times = []
         grad_times_per_factor = []
         inference_times = []
         st_time = time.time()
-        # random.shuffle(all_training_instances)
+        random.shuffle(all_training_instances)
         for t_idx, training_instance in enumerate(all_training_instances):
             sys.stderr.write('.')
             j_ti = json.loads(training_instance)

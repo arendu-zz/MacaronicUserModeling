@@ -140,7 +140,7 @@ def batch_sgd(training_instance, theta_en_en, theta_en_de, phi_en_en, phi_en_de,
     ti = TrainingInstance.from_dict(j_ti)
     sent_id = ti.current_sent[0].sent_id
     # sys.stderr.write('sent id:' + str(sent_id))
-    # print 'in:', sent_id, theta_en_en, theta_en_de
+    print 'in:', sent_id, theta_en_en, theta_en_de
     fg = create_factor_graph(ti=ti,
                              learning_rate=lr,
                              theta_en_de=theta_en_de,
@@ -157,7 +157,7 @@ def batch_sgd(training_instance, theta_en_en, theta_en_de, phi_en_en, phi_en_de,
     # sys.stderr.write('.')
     # f_en_en_theta, f_en_de_theta = fg.update_theta()
     g_en_en, g_en_de = fg.return_gradient()
-    # print 'out', g_en_en, g_en_de
+    print 'out', g_en_en, g_en_de
     # sys.stderr.write('.\n')
     return [sent_id, g_en_en, g_en_de]
 
@@ -241,8 +241,8 @@ if __name__ == '__main__':
     phi_en_de.astype(DTYPE)
 
     split_ratio = int(len(training_instances) * 0.33)
-    test_instances = training_instances[:10]
-    all_training_instances = training_instances[10:]
+    test_instances = training_instances[:split_ratio]
+    all_training_instances = training_instances[split_ratio:]
 
     for epoch in range(2):
         lr = 0.1

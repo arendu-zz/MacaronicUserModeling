@@ -31,7 +31,7 @@ def get_var_node_pair(sorted_current_sent, current_guesses, current_revealed, en
     for idx, simplenode in enumerate(sorted_current_sent):
         if simplenode.lang == 'en':
             v = VariableNode(id=idx, var_type=VAR_TYPE_GIVEN, domain_type='en', domain=en_domain,
-                             supervised_label=simplenode.l2_word)
+                    supervised_label=simplenode.l2_word)
 
         else:
             guess = find_guess(simplenode.id, current_guesses)
@@ -43,11 +43,12 @@ def get_var_node_pair(sorted_current_sent, current_guesses, current_revealed, en
             assert guess is not None
             try:
                 v = VariableNode(id=idx, var_type=var_type,
-                                 domain_type='en',
-                                 domain=en_domain,
-                                 supervised_label=guess.guess)
+                        domain_type='en',
+                        domain=en_domain,
+                        supervised_label=guess.guess)
 
             except AssertionError:
+                print 'guess:', guess.guess, ' added to var node en domain'
                 print 'something bad...'
         var_node_pairs.append((v, simplenode))
     return var_node_pairs
@@ -97,9 +98,9 @@ def load_fg(fg, ti, en_domain, de2id, en2id):
                 v_given = v1 if v1.var_type == VAR_TYPE_GIVEN else v2
                 v_pred = v1 if v1.var_type == VAR_TYPE_PREDICTED else v2
                 f = FactorNode(id=len(factors),
-                               factor_type='en_en',
-                               observed_domain_type='en',
-                               observed_domain_size=len_en_domain)
+                        factor_type='en_en',
+                        observed_domain_type='en',
+                        observed_domain_size=len_en_domain)
                 o_idx = en2id[v_given.supervised_label]  # either a users guess OR a revealed word -> see line 31,36
                 p = PotentialTable(v_id2dim={v_pred.id: 0}, table=None, observed_dim=o_idx)
                 f.add_varset_with_potentials(varset=[v_pred], ptable=p)
@@ -125,13 +126,13 @@ if __name__ == '__main__':
 
     if options.training_instances == '' or options.en_domain == '' or options.de_domain == '':
         sys.stderr.write(
-            'Usage: python real_phi_test.py\n\
-            --ti [training instance file]\n \
-            --end [en domain file]\n \
-            --ded [de domain file]\n \
-            --phi_wiwj [wiwj file]\n \
-            --phi_ed [ed file]\n \
-            --phi_ped [ped file]\n')
+                'Usage: python real_phi_test.py\n\
+                        --ti [training instance file]\n \
+                        --end [en domain file]\n \
+                        --ded [de domain file]\n \
+                        --phi_wiwj [wiwj file]\n \
+                        --phi_ed [ed file]\n \
+                        --phi_ped [ped file]\n')
         exit(1)
     else:
         pass
@@ -169,21 +170,15 @@ if __name__ == '__main__':
     all_training_instances = training_instances[split_ratio:]
     lr = 0.1
     for t_idx, training_instance in enumerate(training_instances):
+        print t_idx
         j_ti = json.loads(training_instance)
         ti = TrainingInstance.from_dict(j_ti)
         lt = time.time()
         fg = FactorGraph(theta_en_en=f_en_en_theta if fg is None else fg.theta_en_en,
-                         theta_en_de=f_en_de_theta if fg is None else fg.theta_en_de,
-                         phi_en_en=phi_en_en,
-                         phi_en_de=phi_en_de)
+                theta_en_de=f_en_de_theta if fg is None else fg.theta_en_de,
+                phi_en_en=phi_en_en,
+                phi_en_de=phi_en_de)
         fg.learning_rate = lr
 
         fg = load_fg(fg, ti, en_domain, de2id=de2id, en2id=en2id)
-        # load_times.append(time.time() - lt)
-        # mp = time.time()
-        # for f in fg.factors:
-        #    f.potential_table.make_potentials()  # can this be made faster??
-        # mp_times.append(time.time() - mp)
-        # it = time.time()
-        # fg.initialize()
     print 'done checking', len(training_instances)
