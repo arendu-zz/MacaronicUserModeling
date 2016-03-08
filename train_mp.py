@@ -11,10 +11,7 @@ import time
 import codecs
 from numpy import float32 as DTYPE
 from scipy import sparse
-import multiprocessing
-import traceback
 from multiprocessing import Pool
-import sharedmem
 
 global f_en_en_theta, f_en_de_theta
 np.seterr(divide='raise', over='raise', under='ignore')
@@ -250,7 +247,7 @@ if __name__ == '__main__':
     for epoch in range(2):
         lr = 0.1
         print 'epoch:', epoch, 'theta:', f_en_en_theta, f_en_de_theta
-        # random.shuffle(all_training_instances)
+        random.shuffle(all_training_instances)
         pool = Pool(processes=cpu_count)
         for ti in all_training_instances:
             pool.apply_async(batch_sgd, args=(
