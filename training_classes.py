@@ -95,12 +95,6 @@ class Guess(dict):
     def __init__(self, id, guess, revealed, l2_word):
         dict.__init__(self)
         self.__dict__ = self
-        Guess.spell = enchant.DictWithPWL("en_US",
-                                          "/Users/arenduchintala/Projects2/MacaronicWebApp/data/vocab/en.vocab.50k")
-        Guess.spell_german = enchant.request_pwl_dict(
-            '/Users/arenduchintala/Projects2/MacaronicWebApp/data/de/nachrichtenleicht-filtered/nachrichtenleicht.de.vocab')
-        Guess.ed = EditDistance(None)
-        tmp_l2_lower = l2_word.lower()
         if guess.strip() == '':
             self.guess = '__blank__'
         elif guess.strip().lower() == '__blank__' or guess.strip().lower() == '__unk__' or guess.strip().lower() == '__copy__':
@@ -110,11 +104,10 @@ class Guess(dict):
                 sys.stderr.write("phrasal guess:" + guess + '\n')
             guess = sorted([(len(g), g) for g in guess.split()])[-1][1]
             guess = guess[:-1] if guess[-1] == '*' and len(guess) > 1 else guess
-            if check_ignore_case(guess, Guess.spell) or True: # the or True condition means at this stage we accept what ever the make_training_instance.py file has generated.
+            if True:  # the or True condition means at this stage we accept what ever the make_training_instance.py file has generated.
                 self.guess = guess.lower().replace("'", "")
             else:
-                result = copy_or_not(guess, tmp_l2_lower, Guess.spell, Guess.ed)
-                self.guess = result[0].lower().replace("'", "")
+                pass
         self.l2_word = l2_word
         self.id = id
         self.revealed = revealed
