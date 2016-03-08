@@ -59,6 +59,7 @@ def induce_s_mutliply_clip(s1, d2, k=1000):
 
 
 def induce_s_multiply_threshold(s1, d2):
+    raise NotImplementedError("do not use it seems very slow..")
     if __debug__: assert np.shape(d2)[0] < np.shape(d2)[1]
     if __debug__: assert np.shape(s1)[0] == np.shape(d2)[1] and np.shape(s1)[1] == 1
     tt = 1.0 / np.size(s1) ** 2
