@@ -31,6 +31,7 @@ class FactorGraph():
         self.learning_rate = 0.1
         self.cg_times = []
         self.gg_times = []
+        self.sgg_times = []
 
     def add_factor(self, fac):
         if __debug__: assert fac not in self.factors
@@ -251,7 +252,9 @@ class VariableNode():
         m = self.get_marginal()
         a = np.reshape(m.m, (np.size(m.m, )))
         max_idx = np.argpartition(a, -top)[-top:]
+        max_idx = max_idx[np.argsort(a[max_idx])]
         max_vocab = [self.domain[i] for i in max_idx]
+        max_vocab.reverse()
         return self.supervised_label, max_vocab
 
 
@@ -387,7 +390,8 @@ class FactorNode():
                 else:
                     raise NotImplementedError("only supports pairwise factors..")
             marignals = array_utils.dd_matrix_multiply(c, r)  # np.dot(c, r)
-        beliefs = np.multiply(marignals, self.potential_table.table)
+        # beliefs = np.multiply(marignals, self.potential_table.table)
+        beliefs = array_utils.induce_s_pointwise_multiply_clip(marignals, self.potential_table.table, k=1)
         beliefs = array_utils.normalize(beliefs)
         return beliefs
 
@@ -402,7 +406,7 @@ class FactorNode():
         cg = time.time()
         g = self.cell_gradient()
         self.graph.cg_times.append(time.time() - cg)
-
+        sgg = time.time()
         if self.potential_table.observed_dim is not None:
             sparse_g = np.zeros(self.get_shape())
             g = np.reshape(g, (np.size(g),))
@@ -411,9 +415,14 @@ class FactorNode():
         else:
             # g is already  a matrix
             pass
-        gg = time.time()
+        self.graph.sgg_times.append(time.time() - sgg)
         f_ij = np.reshape(g, (np.size(g), 1))
+        gg = time.time()
+        # print 'nz appx, orig, full :', np.count_nonzero(f_ij_approx), np.count_nonzero(f_ij), np.size(f_ij)
         grad1 = (self.get_phi_csc().T.dot(f_ij)).T
+        # grad_approx = array_utils.induce_s_mutliply(f_ij, self.get_phi().T, k=1000000000)
+        # grad_approx = array_utils.induce_s_mutliply_clip(f_ij, self.get_phi().T, k=1000)
+        # grad1 = grad_approx.T
         # if __debug__: assert  np.allclose(grad1, grad2.T)
         '''on_the_fly_feature_values = self.get_on_the_fly_feature_values()
         grad2 = on_the_fly_feature_values * f_ij
