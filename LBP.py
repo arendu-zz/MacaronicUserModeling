@@ -1,9 +1,10 @@
 __author__ = 'arenduchintala'
 import numpy as np
 from numpy import float32 as DTYPE
-import pdb
 import random
 import array_utils
+from scipy import sparse
+import time
 
 global VAR_TYPE_LATENT, VAR_TYPE_PREDICTED, VAR_TYPE_GIVEN, UNARY_FACTOR, BINARY_FACTOR
 VAR_TYPE_PREDICTED = 'var_type_predicted'
@@ -28,9 +29,11 @@ class FactorGraph():
         self.isLoopy = None
         self.regularization_param = 0.01
         self.learning_rate = 0.1
+        self.cg_times = []
+        self.gg_times = []
 
     def add_factor(self, fac):
-        assert fac not in self.factors
+        if __debug__: assert fac not in self.factors
         self.factors.append(fac)
         fac.graph = self
         for v in fac.varset:
@@ -40,7 +43,7 @@ class FactorGraph():
                 v.graph = self
 
     def get_message_schedule(self, root):
-        assert isinstance(root, VariableNode)
+        if __debug__: assert isinstance(root, VariableNode)
         _schedule = []
         _seen = []
         _stack = [root]
@@ -77,8 +80,8 @@ class FactorGraph():
         return False
 
     def initialize(self):
-        assert len(self.variables) > 0
-        assert len(self.factors) > 0
+        if __debug__: assert len(self.variables) > 0
+        if __debug__: assert len(self.factors) > 0
         fs = sorted([(f.id, f) for f in self.factors])
         self.factors = [f for fid, f in fs]
         vs = sorted([(v.id, v) for v in self.variables.values()])
@@ -86,13 +89,13 @@ class FactorGraph():
         self.isLoopy = self.has_loops()
 
         for f in self.factors:
-            assert len(f.potential_table.var_id2dim) == len(f.varset)
+            if __debug__: assert len(f.potential_table.var_id2dim) == len(f.varset)
             vars = [self.variables[vid] for d, vid in
                     sorted([(d, v) for v, d in f.potential_table.var_id2dim.iteritems()])]
             if len(vars) == 2:
-                assert np.shape(f.potential_table.table) == tuple([len(v.domain) for v in vars])
+                if __debug__: assert np.shape(f.potential_table.table) == tuple([len(v.domain) for v in vars])
             else:
-                assert np.shape(f.potential_table.table) == (len(vars[0].domain), 1)
+                if __debug__: assert np.shape(f.potential_table.table) == (len(vars[0].domain), 1)
                 # todo: this check above is not comprehensive must check if dimsion of the potential table
             # todo: matches in the correct order of variables given by var_id2dim
             if len(f.varset) == 1:
@@ -191,8 +194,8 @@ class FactorGraph():
 
 class VariableNode():
     def __init__(self, id, var_type, domain_type, domain, supervised_label):
-        assert isinstance(id, int)
-        assert supervised_label in domain
+        if __debug__: assert isinstance(id, int)
+        if __debug__: assert supervised_label in domain
         self.id = id
         self.var_type = var_type
         self.domain = domain
@@ -213,24 +216,24 @@ class VariableNode():
         raise NotImplementedError()
 
     def add_factor(self, fc):
-        assert isinstance(fc, FactorNode)
+        if __debug__: assert isinstance(fc, FactorNode)
         self.facset.append(fc)
 
     def init_message_to(self, fc, init_m):
-        assert isinstance(fc, FactorNode)
-        assert isinstance(init_m, Message)
+        if __debug__: assert isinstance(fc, FactorNode)
+        if __debug__: assert isinstance(init_m, Message)
         # todo: should we prune initial messages?
         self.messages[self.id, fc.id] = init_m
 
     def update_message_to(self, fc):
-        assert isinstance(fc, FactorNode)
-        assert fc in self.facset
+        if __debug__: assert isinstance(fc, FactorNode)
+        if __debug__: assert fc in self.facset
         new_m = Message.new_message(self.domain, 1.0 / len(self.domain))
         for other_fc in self.facset:
             if other_fc is not fc:
                 m = self.graph.messages[str(other_fc), str(self)]  # from other factors to this variable
                 new_m = pointwise_multiply(m, new_m)
-                assert np.shape(new_m.m) == np.shape(m.m)
+                if __debug__: assert np.shape(new_m.m) == np.shape(m.m)
         if self.graph.normalize_messages:
             new_m.renormalize()
         self.graph.messages[str(self), str(fc)] = new_m
@@ -254,7 +257,7 @@ class VariableNode():
 
 class FactorNode():
     def __init__(self, id, factor_type=None, observed_domain_type=None, observed_value=None, observed_domain_size=None):
-        assert isinstance(id, int)
+        if __debug__: assert isinstance(id, int)
         self.id = id
         self.varset = []  # set of neighboring variables
         self.potential_table = None
@@ -271,20 +274,20 @@ class FactorNode():
         return isinstance(other, FactorNode) and self.id == other.id
 
     def init_message_to(self, var, init_m):
-        assert isinstance(var, VariableNode)
-        assert isinstance(init_m, Message)
+        if __debug__: assert isinstance(var, VariableNode)
+        if __debug__: assert isinstance(init_m, Message)
         self.graph.messages[str(self), str(var)] = init_m
 
     def add_varset_with_potentials(self, varset, ptable):
-        assert isinstance(ptable, PotentialTable)
+        if __debug__: assert isinstance(ptable, PotentialTable)
         if len(varset) == 2:
-            assert varset[0] != varset[1]
-        assert len(varset) == len(ptable.var_id2dim)
+            if __debug__: assert varset[0] != varset[1]
+        if __debug__: assert len(varset) == len(ptable.var_id2dim)
         if len(varset) > 2:
             raise NotImplementedError("Currently supporting unary and pairwise factors...")
 
         for v in varset:
-            assert v not in self.varset
+            if __debug__: assert v not in self.varset
             self.varset.append(v)
             v.add_factor(self)
         ptable.add_factor(self)
@@ -314,6 +317,14 @@ class FactorNode():
         else:
             raise BaseException("only 2 feature value types are supported right now..")
 
+    def get_phi_csc(self):
+        if self.factor_type == 'en_en':
+            return self.graph.phi_en_en_csc
+        elif self.factor_type == 'en_de':
+            return self.graph.phi_en_de_csc
+        else:
+            raise BaseException("only 2 feature value types are supported right now..")
+
     def get_shape(self):
         if len(self.varset) == 1:
             return len(self.varset[0].domain), self.observed_domain_size
@@ -340,18 +351,18 @@ class FactorNode():
                 # marginalized = np.sum(mul, 1)
                 test_marginalized = np.dot(self.potential_table.table, msg.m)
                 # test_marginalized = np.reshape(test_marginalized, np.shape(marginalized))
-                # assert np.allclose(test_marginalized, marginalized)
+                # if __debug__: assert  np.allclose(test_marginalized, marginalized)
             else:
                 # mul = np.multiply(msg.m.T, self.potential_table.table.T).T
                 # marginalized = np.sum(mul, 0)
                 test_marginalized = np.dot(msg.m.T, self.potential_table.table)
                 # test_marginalized = np.reshape(test_marginalized, np.shape(marginalized))
-                # assert np.allclose(test_marginalized, marginalized)
+                # if __debug__: assert  np.allclose(test_marginalized, marginalized)
 
             new_m = Message(test_marginalized)
             if self.graph.normalize_messages:
                 new_m.renormalize()
-            assert np.shape(new_m.m) == np.shape(self.graph.messages[str(self), str(var)].m)
+            if __debug__: assert np.shape(new_m.m) == np.shape(self.graph.messages[str(self), str(var)].m)
             self.graph.messages[str(self), str(var)] = new_m
 
     def get_factor_beliefs(self):
@@ -375,7 +386,7 @@ class FactorNode():
                     r = np.reshape(m.m, (1, np.size(m.m)))  # row vector
                 else:
                     raise NotImplementedError("only supports pairwise factors..")
-            marignals = array_utils.matrix_multiply(c, r)  # np.dot(c, r)
+            marignals = array_utils.dd_matrix_multiply(c, r)  # np.dot(c, r)
         beliefs = np.multiply(marignals, self.potential_table.table)
         beliefs = array_utils.normalize(beliefs)
         return beliefs
@@ -387,11 +398,11 @@ class FactorNode():
         of[cell] = 1.0
         return of
 
-    def get_on_the_fly_feature_values(self):
-        raise NotImplementedError("the matrix with feature values that are computed on the fly goes here...")
-
     def get_gradient(self):
+        cg = time.time()
         g = self.cell_gradient()
+        self.graph.cg_times.append(time.time() - cg)
+
         if self.potential_table.observed_dim is not None:
             sparse_g = np.zeros(self.get_shape())
             g = np.reshape(g, (np.size(g),))
@@ -400,19 +411,21 @@ class FactorNode():
         else:
             # g is already  a matrix
             pass
+        gg = time.time()
         f_ij = np.reshape(g, (np.size(g), 1))
-        grad1 = f_ij.T.dot(self.get_phi())
+        grad1 = (self.get_phi_csc().T.dot(f_ij)).T
+        # if __debug__: assert  np.allclose(grad1, grad2.T)
         '''on_the_fly_feature_values = self.get_on_the_fly_feature_values()
         grad2 = on_the_fly_feature_values * f_ij
         fg = np.concatenate((grad1, grad2), axis=1)'''
+
+        self.graph.gg_times.append(time.time() - gg)
         return grad1
 
     def cell_gradient(self):
-        obs = self.get_observed_factor()
-        marginal = self.get_factor_beliefs()  # this is the same because I assume binary features  values at the "cell level"
-        exp = marginal
-        g = obs - exp
-        return g
+        obs_counts = self.get_observed_factor()
+        exp_counts = self.get_factor_beliefs()  # this is the same because I assume binary features  values at the "cell level"
+        return obs_counts - exp_counts
 
 
 class ObservedFactor(FactorNode):
@@ -424,8 +437,8 @@ class ObservedFactor(FactorNode):
 
 class Message():
     def __init__(self, m):
-        assert isinstance(m, np.ndarray)
-        assert np.size(m[m < 0.0]) == 0
+        if __debug__: assert isinstance(m, np.ndarray)
+        if __debug__: assert np.size(m[m < 0.0]) == 0
         if np.shape(m) != (np.size(m), 1):
             self.m = np.reshape(m, (np.size(m), 1))
         else:
@@ -443,8 +456,8 @@ class Message():
             e = np.empty_like(self.m)
             e.fill(1.0 / np.size(self.m))
             self.m = e
-        assert np.size(self.m[self.m < 0.0]) == 0
-        assert np.abs(np.sum(self.m) - 1.0) < 1e-10
+        if __debug__: assert np.size(self.m[self.m < 0.0]) == 0
+        if __debug__: assert np.abs(np.sum(self.m) - 1.0) < 1e-10
 
     @staticmethod
     def new_message(domain, init):
@@ -461,9 +474,9 @@ class PotentialTable():
         self.var_id2dim = v_id2dim
 
         if table is not None:
-            assert isinstance(table, np.ndarray)
+            if __debug__: assert isinstance(table, np.ndarray)
             if observed_dim is not None:
-                assert len(v_id2dim) == 1
+                if __debug__: assert len(v_id2dim) == 1
                 if v_id2dim[v_id2dim.keys()[0]] == 0:
                     self.table = np.reshape(table[:, observed_dim], (np.shape(table)[0], 1))
                     self.var_id2dim = v_id2dim
@@ -474,7 +487,7 @@ class PotentialTable():
                 self.table = table
             self.table.astype(DTYPE)
             if len(np.shape(self.table)) > 1:
-                assert np.shape(self.table)[0] == np.shape(self.table)[1] or np.shape(self.table)[1] == 1
+                if __debug__: assert np.shape(self.table)[0] == np.shape(self.table)[1] or np.shape(self.table)[1] == 1
         else:
             pass
 
@@ -484,7 +497,7 @@ class PotentialTable():
         # table = self.factor.get_phi().dot(self.factor.get_theta().T)  # todo: this line is very very slow!!!!
         # table = np.exp(table)
         table = self.factor.get_pot()
-        # assert np.allclose(table_from_pot, table)
+        # if __debug__: assert  np.allclose(table_from_pot, table)
         table_shape = self.factor.get_shape()
         table = np.reshape(table, table_shape)
 
@@ -495,24 +508,24 @@ class PotentialTable():
         self.table = table
         self.table.astype(DTYPE)
         if len(np.shape(self.table)) > 1:
-            assert np.shape(self.table)[0] == np.shape(self.table)[1] or np.shape(self.table)[1] == 1
+            if __debug__: assert np.shape(self.table)[0] == np.shape(self.table)[1] or np.shape(self.table)[1] == 1
 
     def add_factor(self, factor):
-        assert isinstance(factor, FactorNode)
-        assert self.factor is None
+        if __debug__: assert isinstance(factor, FactorNode)
+        if __debug__: assert self.factor is None
         self.factor = factor
 
 
 def pointwise_multiply(m1, m2):
-    assert isinstance(m1, Message)
-    assert isinstance(m2, Message)
+    if __debug__: assert isinstance(m1, Message)
+    if __debug__: assert isinstance(m2, Message)
     if m2 is None:
         return m1
     elif m1 is None:
         return m2
     else:
         # print 'tt:', np.sum(m1.m), np.sum(m2.m)
-        assert np.shape(m1.m) == np.shape(m2.m)
-        # assert np.abs(np.sum(m1.m) - 1) < 1e-5
+        if __debug__: assert np.shape(m1.m) == np.shape(m2.m)
+        # if __debug__: assert  np.abs(np.sum(m1.m) - 1) < 1e-5
         new_m = array_utils.pointwise_multiply(m1.m, m2.m)
     return Message(new_m)
