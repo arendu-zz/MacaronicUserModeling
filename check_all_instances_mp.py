@@ -151,7 +151,7 @@ def batch_check(training_instance, theta_en_en, theta_en_de, phi_en_en, phi_en_d
                              de2id=de2id,
                              en2id=en2id)
 
-    fg.initialize()
+    #fg.initialize()
     # fg.treelike_inference(3)
     return sent_id
 
