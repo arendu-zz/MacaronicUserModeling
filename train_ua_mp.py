@@ -156,7 +156,7 @@ def batch_predictions(training_instance,
     j_ti = json.loads(training_instance)
     ti = TrainingInstance.from_dict(j_ti)
     sent_id = ti.current_sent[0].sent_id
-    # sys.stderr.write('sent id:' + str(sent_id))
+    sys.stderr.write('sent id:' + str(sent_id))
     # print 'in:', sent_id, theta_en_en, theta_en_de
     fg = create_factor_graph(ti=ti,
                              learning_rate=lr,
