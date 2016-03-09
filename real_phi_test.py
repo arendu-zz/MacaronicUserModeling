@@ -72,7 +72,7 @@ def load_fg(fg, ti, en_domain, de2id, en2id):
         history_feature[i, :] += 1.0
         history_feature[:, j] += 1.0
         history_feature[i, j] += 1.0
-    history_feature = np.reshape(history_feature, (np.shape(fg.phi_en_de)[0],))
+    history_feature = np.reshape(history_feature, (np.shape(fg.phi_en_de)[0],1))
     fg.phi_en_de[:, -1] = history_feature
 
     # table = self.factor.get_phi().dot(self.factor.get_theta().T)  # todo: this line is very very slow!!!!
@@ -167,7 +167,7 @@ if __name__ == '__main__':
     # en_domain = ['en_' + str(i) for i in range(500)]
     # de_domain = ['de_' + str(i) for i in range(100)]
     print 'read ti and domains...'
-    f_en_en = ['f1', 'dummy_ee']
+    f_en_en = ['f1']
 
     # f_en_en_theta = np.random.rand(1, len(f_en_en)) - 0.5  # zero mean random values
     f_en_en_theta = np.zeros((1, len(f_en_en)))
@@ -177,14 +177,11 @@ if __name__ == '__main__':
         phi_en_en1[phi_en_en1 < 1.0 / len(en_domain)] = 0.0  # make sparse...
 
     phi_en_en1 = np.reshape(phi_en_en1, (len(en_domain) * len(en_domain), 1))
-    ss = np.shape(phi_en_en1)
-    phi_en_en2 = np.random.rand(ss[0], ss[1])
-    if make_phi_sparse:
-        phi_en_en2[phi_en_en2 < 0.5] = 0
-    phi_en_en = np.concatenate((phi_en_en1, phi_en_en2), axis=1)
+    phi_en_en = np.concatenate((phi_en_en1,), axis=1)
     phi_en_en.astype(DTYPE)
+    phi_en_en = sparse.lil_matrix(phi_en_en)
 
-    f_en_de = ['x', 'y', 'dummy_ef', 'history']
+    f_en_de = ['x', 'y', 'history']
     # f_en_de_theta = np.random.rand(1, len(f_en_de)) - 0.5  # zero mean random values
     f_en_de_theta = np.zeros((1, len(f_en_de)))
     print 'reading phi ed'
@@ -199,12 +196,10 @@ if __name__ == '__main__':
         phi_en_de2[phi_en_de2 < 0.5] = 0.0
     phi_en_de2 = np.reshape(phi_en_de2, (len(en_domain) * len(de_domain), 1))
     ss = np.shape(phi_en_de2)
-    phi_en_de3 = np.random.rand(ss[0], ss[1])
-    if make_phi_sparse:
-        phi_en_de3[phi_en_de3 < 0.5] = 0
-    phi_en_de4 = np.zeros_like(phi_en_de1)
-    phi_en_de = np.concatenate((phi_en_de1, phi_en_de2, phi_en_de3, phi_en_de4), axis=1)
+    phi_en_de3 = np.zeros_like(phi_en_de1)
+    phi_en_de = np.concatenate((phi_en_de1, phi_en_de2, phi_en_de3), axis=1)
     phi_en_de.astype(DTYPE)
+    phi_en_de = sparse.lil_matrix(phi_en_de)
 
     fg = None
     split_ratio = int(len(training_instances) * 0.33)
@@ -214,7 +209,7 @@ if __name__ == '__main__':
     for epoch in range(3):
         print 'epoch', epoch
         lp = 0.0
-        if epoch  == 0 or epoch == 2:
+        if epoch == 0 or epoch == 2:
             for t_idx, training_instance in enumerate(test_instances):
                 j_ti = json.loads(training_instance)
                 ti = TrainingInstance.from_dict(j_ti)
@@ -239,7 +234,7 @@ if __name__ == '__main__':
         grad_times_per_factor = []
         inference_times = []
         st_time = time.time()
-        random.shuffle(all_training_instances)
+        # random.shuffle(all_training_instances)
         for t_idx, training_instance in enumerate(all_training_instances):
             sys.stderr.write('.')
             j_ti = json.loads(training_instance)
