@@ -137,8 +137,12 @@ class FactorGraph():
         return log_posterior
 
     def get_max_postior_label(self, top=10):
+        label_guesses = []
         for v_key, v in self.variables.iteritems():
-            print v.get_max_vocab(top)
+            s, sp, g = v.get_max_vocab(top)
+            g_str = ' '.join([i + ' ' + p for i, p in g])
+            label_guesses.append(s + ' ' + sp + ' ' + g_str)
+        return label_guesses
 
     def hw_inf(self, iterations):
         raise BaseException("This method assumes self.variables is a list.. depricated...")
@@ -259,9 +263,9 @@ class VariableNode():
         a = np.reshape(m.m, (np.size(m.m, )))
         max_idx = np.argpartition(a, -top)[-top:]
         max_idx = max_idx[np.argsort(a[max_idx])]
-        max_vocab = [self.domain[i] for i in max_idx]
+        max_vocab = [(self.domain[i], '%0.4f' % np.log(a[i])) for i in max_idx]
         max_vocab.reverse()
-        return self.supervised_label, max_vocab
+        return self.supervised_label, '%0.4f' % np.log(m.m[self.supervised_label_index]), max_vocab
 
 
 class FactorNode():
