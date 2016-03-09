@@ -59,11 +59,20 @@ def get_var_node_pair(sorted_current_sent, current_guesses, current_revealed, en
     return var_node_pairs
 
 
-def create_factor_graph(ti, learning_rate,
-                        theta_en_en, theta_en_de,
-                        phi_en_en, phi_en_de,
-                        basic_f_en_en, basic_f_en_de,
-                        en_domain, de2id, en2id):
+def create_factor_graph(ti,
+                        learning_rate,
+                        theta_en_en,
+                        theta_en_de,
+                        basic_phi_en_en,
+                        basic_phi_en_de,
+                        phi_en_en,
+                        phi_en_de,
+                        basic_f_en_en,
+                        basic_f_en_de,
+                        en_domain,
+                        de2id,
+                        en2id,
+                        adaptation2id):
     ordered_current_sent = sorted([(simplenode.position, simplenode) for simplenode in ti.current_sent])
     ordered_current_sent = [simplenode for position, simplenode in ordered_current_sent]
     var_node_pairs = get_var_node_pair(ordered_current_sent, ti.current_guesses, ti.current_revealed_guesses, en_domain)
@@ -87,6 +96,18 @@ def create_factor_graph(ti, learning_rate,
         history_feature[i, j] += 1.0
     history_feature = np.reshape(history_feature, (np.shape(fg.phi_en_de)[0],))
     fg.phi_en_de[:, basic_f_en_de.index('history')] = history_feature
+
+    # adapt
+    user_id = ti.user_id
+    if len(ti.past_sentences_seen) < 10:
+        user_experience = 'novice'
+    elif len(ti.past_sentences_seen) < 40:
+        user_experience = 'beginner'
+    else:
+        user_experience = 'familiar'
+    on_id = adaptation2id[user_id, user_experience]
+    fg.phi_en_en = array_utils.set_adaptation(basic_phi_en_en, fg.phi_en_en, [on_id])
+    fg.phi_en_de = array_utils.set_adaptation(basic_phi_en_de, fg.phi_en_de, [on_id])
 
     pot_en_en = fg.phi_en_en.dot(fg.theta_en_en.T)
     pot_en_en = np.exp(pot_en_en)
@@ -144,15 +165,18 @@ def create_factor_graph(ti, learning_rate,
 
 
 def batch_predictions(training_instance,
-                      theta_en_de,
-                      theta_en_en,
-                      phi_en_en,
-                      phi_en_de, lr,
+                      f_en_en_theta,
+                      f_en_de_theta,
+                      basic_phi_en_en,
+                      basic_phi_en_de,
+                      adapt_phi_en_en,
+                      adapt_phi_en_de, lr,
                       en_domain,
                       de2id,
                       en2id,
                       basic_f_en_en,
-                      basic_f_en_de):
+                      basic_f_en_de,
+                      adaptation2id):
     j_ti = json.loads(training_instance)
     ti = TrainingInstance.from_dict(j_ti)
     sent_id = ti.current_sent[0].sent_id
@@ -160,18 +184,22 @@ def batch_predictions(training_instance,
     # print 'in:', sent_id, theta_en_en, theta_en_de
     fg = create_factor_graph(ti=ti,
                              learning_rate=lr,
-                             theta_en_de=theta_en_de,
-                             theta_en_en=theta_en_en,
-                             phi_en_en=phi_en_en,
-                             phi_en_de=phi_en_de,
+                             theta_en_de=f_en_de_theta,
+                             theta_en_en=f_en_en_theta,
+                             basic_phi_en_en=basic_phi_en_en,
+                             basic_phi_en_de=basic_phi_en_de,
+                             phi_en_en=adapt_phi_en_en,
+                             phi_en_de=adapt_phi_en_de,
                              basic_f_en_en=basic_f_en_en,
                              basic_f_en_de=basic_f_en_de,
                              en_domain=en_domain,
                              de2id=de2id,
-                             en2id=en2id)
+                             en2id=en2id,
+                             adaptation2id=adaptation2id)
 
     fg.initialize()
     fg.treelike_inference(3)
+
     return fg.get_posterior_probs()
 
 
@@ -185,10 +213,18 @@ def batch_prediction_probs_accumulate(p):
 
 
 def batch_sgd(training_instance,
-              theta_en_en, theta_en_de,
-              phi_en_en, phi_en_de,
-              lr, en_domain, de2id, en2id,
-              basic_f_en_en, basic_f_en_de):
+              theta_en_en,
+              theta_en_de,
+              basic_phi_en_en,
+              basic_phi_en_de,
+              phi_en_en,
+              phi_en_de, lr,
+              en_domain,
+              de2id,
+              en2id,
+              basic_f_en_en,
+              basic_f_en_de,
+              adaptation2id):
     j_ti = json.loads(training_instance)
     ti = TrainingInstance.from_dict(j_ti)
     sent_id = ti.current_sent[0].sent_id
@@ -196,13 +232,16 @@ def batch_sgd(training_instance,
                              learning_rate=lr,
                              theta_en_de=theta_en_de,
                              theta_en_en=theta_en_en,
+                             basic_phi_en_en=basic_phi_en_en,
+                             basic_phi_en_de=basic_phi_en_de,
                              phi_en_en=phi_en_en,
                              phi_en_de=phi_en_de,
                              basic_f_en_en=basic_f_en_en,
                              basic_f_en_de=basic_f_en_de,
                              en_domain=en_domain,
                              de2id=de2id,
-                             en2id=en2id)
+                             en2id=en2id,
+                             adaptation2id=adaptation2id)
 
     fg.initialize()
     # sys.stderr.write('.')
@@ -260,14 +299,14 @@ if __name__ == '__main__':
     print 'reading in  ti and domains...'
     training_instances = codecs.open(options.training_instances).readlines()
     t_now = '-'.join(ctime().split())
-    model_param_writer_name = options.training_instances + '.cpu' + str(cpu_count) + '.' + t_now + '.params'
+    model_param_writer_name = options.training_instances + '.cpu' + str(cpu_count) + '.' + t_now + '.adapt.params'
     writer = open(model_param_writer_name, 'w')
     de_domain = [i.strip() for i in codecs.open(options.de_domain, 'r', 'utf8').readlines()]
     en_domain = [i.strip() for i in codecs.open(options.en_domain, 'r', 'utf8').readlines()]
     en2id = dict((e, idx) for idx, e in enumerate(en_domain))
     de2id = dict((d, idx) for idx, d in enumerate(de_domain))
     users = [i.strip() for i in codecs.open(options.user_list, 'r', 'utf8').readlines()]
-    experience = ['novice']
+    experience = ['novice', 'beginner', 'familiar']
     adaptation2id = {}
     for u, e in itertools.product(users, experience):
         adaptation2id[u, e] = len(adaptation2id) + 1
@@ -276,7 +315,7 @@ if __name__ == '__main__':
     basic_f_en_en = ['skipgram']
 
     # f_en_en_theta = np.random.rand(1, len(f_en_en)) - 0.5  # zero mean random values
-    f_en_en_theta = np.zeros((1, len(basic_f_en_en)))
+    f_en_en_theta = np.ones((1, len(basic_f_en_en)))
     print 'reading phi wiwj'
     phi_en_en1 = np.loadtxt(options.phi_wiwj)
     phi_en_en1[phi_en_en1 < 2.0 / len(en_domain)] = 0.0  # make sparse...
@@ -308,10 +347,17 @@ if __name__ == '__main__':
 
     # appending features for adaptation..
     print 'adding adaptation features...'
-    f_en_en_theta = np.zeros((1, len(basic_f_en_en) * (len(adaptation2id) + 1)))
+    f_en_en_theta = np.ones((1, len(basic_f_en_en) * (len(adaptation2id) + 1)))
+    f_en_en_theta *= 0.2646
     f_en_de_theta = np.zeros((1, len(basic_f_en_de) * (len(adaptation2id) + 1)))
+    old = np.array([4.74, 2.3359, 3.3745])
+    for o in range(len(adaptation2id) + 1):
+        st = o * len(basic_f_en_de)
+        f_en_de_theta[0, range(st, st + len(basic_f_en_de))] = old
     adapt_phi_en_en = array_utils.make_adapt_phi(phi_en_en, len(adaptation2id))
     adapt_phi_en_de = array_utils.make_adapt_phi(phi_en_de, len(adaptation2id))
+    basic_phi_en_en = phi_en_en
+    basic_phi_en_de = phi_en_de
     assert np.shape(f_en_en_theta)[1] == np.shape(adapt_phi_en_en)[1]
     print 'done..'
     split_ratio = int(len(training_instances) * 0.1)
@@ -319,63 +365,71 @@ if __name__ == '__main__':
     all_training_instances = training_instances[split_ratio:]
     prediction_probs = 0.0
     lr = 0.1
-    try:
+
+    pool = Pool(processes=cpu_count)
+    for ti in test_instances:
+        pool.apply_async(batch_predictions, args=(
+            ti,
+            f_en_en_theta,
+            f_en_de_theta,
+            basic_phi_en_en,
+            basic_phi_en_de,
+            adapt_phi_en_en,
+            adapt_phi_en_de, lr,
+            en_domain,
+            de2id,
+            en2id,
+            basic_f_en_en,
+            basic_f_en_de,
+            adaptation2id), callback=batch_prediction_probs_accumulate)
+    pool.close()
+    pool.join()
+    print '\nprediction probs:', prediction_probs
+    for epoch in range(2):
+        lr = 0.05
+        print 'epoch:', epoch, 'theta:', f_en_en_theta, f_en_de_theta
+        random.shuffle(all_training_instances)
         pool = Pool(processes=cpu_count)
-        for ti in test_instances:
-            pool.apply_async(batch_predictions, args=(
+        for ti in all_training_instances:
+            pool.apply_async(batch_sgd, args=(
                 ti,
                 f_en_en_theta,
                 f_en_de_theta,
+                basic_phi_en_en,
+                basic_phi_en_de,
                 adapt_phi_en_en,
                 adapt_phi_en_de, lr,
                 en_domain,
                 de2id,
                 en2id,
                 basic_f_en_en,
-                basic_f_en_de), callback=batch_prediction_probs_accumulate)
+                basic_f_en_de,
+                adaptation2id), callback=batch_sgd_accumulate)
         pool.close()
         pool.join()
+        print '\nepoch:', epoch, f_en_en_theta, f_en_de_theta
+        prediction_probs = 0.0
+        pool = Pool(processes=cpu_count)
+        for ti in test_instances:
+            pool.apply_async(batch_predictions, args=(
+                ti,
+                f_en_en_theta,
+                f_en_de_theta,
+                basic_phi_en_en,
+                basic_phi_en_de,
+                adapt_phi_en_en,
+                adapt_phi_en_de, lr,
+                en_domain,
+                de2id,
+                en2id,
+                basic_f_en_en,
+                basic_f_en_de,
+                adaptation2id), callback=batch_prediction_probs_accumulate)
+        pool.close()
+        pool.join()
+        lr *= 0.5
         print '\nprediction probs:', prediction_probs
-        for epoch in range(2):
-            lr = 0.05
-            print 'epoch:', epoch, 'theta:', f_en_en_theta, f_en_de_theta
-            random.shuffle(all_training_instances)
-            pool = Pool(processes=cpu_count)
-            for ti in all_training_instances:
-                pool.apply_async(batch_sgd, args=(
-                    ti,
-                    f_en_en_theta,
-                    f_en_de_theta,
-                    adapt_phi_en_en,
-                    adapt_phi_en_de, lr,
-                    en_domain,
-                    de2id,
-                    en2id,
-                    basic_f_en_en,
-                    basic_f_en_de), callback=batch_sgd_accumulate)
-            pool.close()
-            pool.join()
-            print '\nepoch:', epoch, f_en_en_theta, f_en_de_theta
-            prediction_probs = 0.0
-            pool = Pool(processes=cpu_count)
-            for ti in test_instances:
-                pool.apply_async(batch_predictions, args=(
-                    ti,
-                    f_en_en_theta,
-                    f_en_de_theta,
-                    adapt_phi_en_en,
-                    adapt_phi_en_de, lr,
-                    en_domain,
-                    de2id,
-                    en2id,
-                    basic_f_en_en,
-                    basic_f_en_de), callback=batch_prediction_probs_accumulate)
-            pool.close()
-            pool.join()
-            lr *= 0.5
-            print '\nprediction probs:', prediction_probs
-    except:
-        raise BaseException("ok some error...")
+
 print '\ntheta final:', f_en_en_theta, f_en_de_theta
 w = codecs.open(model_param_writer_name + '.final', 'w')
 f_en_en_theta = np.reshape(f_en_en_theta, (np.size(f_en_en_theta),))
