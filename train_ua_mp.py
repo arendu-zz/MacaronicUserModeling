@@ -31,6 +31,40 @@ def find_guess(simplenode_id, guess_list):
     return None
 
 
+def save_params(w, ee_theta, ed_theta, ee_names, ed_names, adaptation2id):
+    en_de_adapt_names = [(0, 'original')] + sorted([(i, '_'.join(k)) for k, i in adaptation2id.iteritems()])
+    en_de_adapt_names = [k for i, k in en_de_adapt_names]
+
+    ed_adapt_names = ['_'.join([uname, basic]) for uname, basic in
+                      itertools.product(en_de_adapt_names, ed_names)]
+    print en_de_adapt_names
+    print ed_names
+    print np.shape(ed_theta), (len(en_de_adapt_names), len(ed_names))
+    en_de_adapt_weights = np.reshape(ed_theta, (len(en_de_adapt_names), len(ed_names)))
+
+    en_en_adapt_names = [(0, 'original')] + sorted([(i, '_'.join(k)) for k, i in adaptation2id.iteritems()])
+    en_en_adapt_names = [k for i, k in en_en_adapt_names]
+
+    ee_adapt_names = ['_'.join([uname, basic]) for uname, basic in
+                      itertools.product(en_en_adapt_names, ee_names)]
+
+    print en_en_adapt_names
+    print ee_names
+    print np.shape(ee_theta), (len(en_en_adapt_names), len(ee_names))
+    en_en_adapt_weights = np.reshape(ee_theta, (len(en_en_adapt_names), len(ee_names)))
+
+    w.write('\n'.join(ee_adapt_names))
+    w.write('\n')
+    w.write(np.array_str(en_en_adapt_weights))
+
+    w.write('\n'.join(ed_adapt_names))
+    w.write('\n')
+    w.write(np.array_str(en_de_adapt_weights))
+
+    w.flush()
+    w.close()
+
+
 def get_var_node_pair(sorted_current_sent, current_guesses, current_revealed, en_domain):
     var_node_pairs = []
 
@@ -63,8 +97,6 @@ def create_factor_graph(ti,
                         learning_rate,
                         theta_en_en,
                         theta_en_de,
-                        basic_phi_en_en,
-                        basic_phi_en_de,
                         phi_en_en,
                         phi_en_de,
                         basic_f_en_en,
@@ -94,12 +126,15 @@ def create_factor_graph(ti,
         history_feature[i, :] += 1.0
         history_feature[:, j] += 1.0
         history_feature[i, j] += 1.0
-    history_feature = np.reshape(history_feature, (np.shape(fg.phi_en_de)[0],))
+    history_feature = np.reshape(history_feature, (np.shape(fg.phi_en_de)[0], 1))
+    # print 'here'
+    # print basic_f_en_de.index('history')
+    # print np.shape(fg.phi_en_de), np.shape(history_feature), type(fg.phi_en_de), type(history_feature)
     fg.phi_en_de[:, basic_f_en_de.index('history')] = history_feature
-
+    # print 'here after history'
     # adapt
     user_id = ti.user_id
-    user_experience = 'novice'
+    user_experience = ''
     '''
     if len(ti.past_sentences_seen) < 10:
         user_experience = 'novice'
@@ -108,10 +143,15 @@ def create_factor_graph(ti,
     else:
         user_experience = 'familiar'
     '''
-    on_id = adaptation2id[user_id, user_experience]
-    fg.phi_en_en = array_utils.set_adaptation(basic_phi_en_en, fg.phi_en_en, [on_id])
-    fg.phi_en_de = array_utils.set_adaptation(basic_phi_en_de, fg.phi_en_de, [on_id])
 
+    on_id = adaptation2id[user_id, user_experience]
+    print 'on_id', on_id
+    fg.phi_en_en = array_utils.set_adaptation(len(basic_f_en_en), fg.phi_en_en, [on_id])
+    fg.phi_en_de = array_utils.set_adaptation(len(basic_f_en_de), fg.phi_en_de, [on_id])
+
+    fg.phi_en_de_csc = fg.phi_en_de.tocsc()  # sparse.csc_matrix(fg.phi_en_de)
+    fg.phi_en_en_csc = fg.phi_en_en.tocsc()  # sparse.csc_matrix(fg.phi_en_en)
+    # print 'here2'
     pot_en_en = fg.phi_en_en.dot(fg.theta_en_en.T)
     pot_en_en = np.exp(pot_en_en)
     fg.pot_en_en = pot_en_en
@@ -121,8 +161,7 @@ def create_factor_graph(ti,
     fg.pot_en_de = pot_en_de
 
     # covert to sparse phi
-    fg.phi_en_de_csc = sparse.csc_matrix(fg.phi_en_de)
-    fg.phi_en_en_csc = sparse.csc_matrix(fg.phi_en_en)
+
 
     # create Ve x Vg factors
     for v, simplenode in var_node_pairs:
@@ -163,15 +202,13 @@ def create_factor_graph(ti,
         fg.add_factor(f)
     for f in fg.factors:
         f.potential_table.slice_potentials()
-    sys.stderr.write('.')
+    sys.stderr.write('ok load graph...')
     return fg
 
 
 def batch_predictions(training_instance,
                       f_en_en_theta,
                       f_en_de_theta,
-                      basic_phi_en_en,
-                      basic_phi_en_de,
                       adapt_phi_en_en,
                       adapt_phi_en_de, lr,
                       en_domain,
@@ -189,8 +226,6 @@ def batch_predictions(training_instance,
                              learning_rate=lr,
                              theta_en_de=f_en_de_theta,
                              theta_en_en=f_en_en_theta,
-                             basic_phi_en_en=basic_phi_en_en,
-                             basic_phi_en_de=basic_phi_en_de,
                              phi_en_en=adapt_phi_en_en,
                              phi_en_de=adapt_phi_en_de,
                              basic_f_en_en=basic_f_en_en,
@@ -218,8 +253,6 @@ def batch_prediction_probs_accumulate(p):
 def batch_sgd(training_instance,
               theta_en_en,
               theta_en_de,
-              basic_phi_en_en,
-              basic_phi_en_de,
               phi_en_en,
               phi_en_de, lr,
               en_domain,
@@ -235,8 +268,6 @@ def batch_sgd(training_instance,
                              learning_rate=lr,
                              theta_en_de=theta_en_de,
                              theta_en_en=theta_en_en,
-                             basic_phi_en_en=basic_phi_en_en,
-                             basic_phi_en_de=basic_phi_en_de,
                              phi_en_en=phi_en_en,
                              phi_en_de=phi_en_de,
                              basic_f_en_en=basic_f_en_en,
@@ -309,7 +340,7 @@ if __name__ == '__main__':
     en2id = dict((e, idx) for idx, e in enumerate(en_domain))
     de2id = dict((d, idx) for idx, d in enumerate(de_domain))
     users = [i.strip() for i in codecs.open(options.user_list, 'r', 'utf8').readlines()]
-    experience = ['novice']
+    experience = ['']
     adaptation2id = {}
     for u, e in itertools.product(users, experience):
         adaptation2id[u, e] = len(adaptation2id) + 1
@@ -358,9 +389,10 @@ if __name__ == '__main__':
         st = o * len(basic_f_en_de)
         f_en_de_theta[0, range(st, st + len(basic_f_en_de))] = old
     adapt_phi_en_en = array_utils.make_adapt_phi(phi_en_en, len(adaptation2id))
+    adapt_phi_en_en = sparse.lil_matrix(adapt_phi_en_en)
     adapt_phi_en_de = array_utils.make_adapt_phi(phi_en_de, len(adaptation2id))
-    basic_phi_en_en = phi_en_en
-    basic_phi_en_de = phi_en_de
+    adapt_phi_en_de = sparse.lil_matrix(adapt_phi_en_de)
+
     assert np.shape(f_en_en_theta)[1] == np.shape(adapt_phi_en_en)[1]
     print 'done..'
     split_ratio = int(len(training_instances) * 0.1)
@@ -369,14 +401,14 @@ if __name__ == '__main__':
     prediction_probs = 0.0
     lr = 0.1
 
+    w = codecs.open(model_param_writer_name + '.init', 'w')
+    save_params(w, f_en_en_theta, f_en_de_theta, basic_f_en_en, basic_f_en_de, adaptation2id)
     pool = Pool(processes=cpu_count)
     for ti in test_instances:
         pool.apply_async(batch_predictions, args=(
             ti,
             f_en_en_theta,
             f_en_de_theta,
-            basic_phi_en_en,
-            basic_phi_en_de,
             adapt_phi_en_en,
             adapt_phi_en_de, lr,
             en_domain,
@@ -398,8 +430,6 @@ if __name__ == '__main__':
                 ti,
                 f_en_en_theta,
                 f_en_de_theta,
-                basic_phi_en_en,
-                basic_phi_en_de,
                 adapt_phi_en_en,
                 adapt_phi_en_de, lr,
                 en_domain,
@@ -418,8 +448,6 @@ if __name__ == '__main__':
                 ti,
                 f_en_en_theta,
                 f_en_de_theta,
-                basic_phi_en_en,
-                basic_phi_en_de,
                 adapt_phi_en_en,
                 adapt_phi_en_de, lr,
                 en_domain,
@@ -435,11 +463,29 @@ if __name__ == '__main__':
 
 print '\ntheta final:', f_en_en_theta, f_en_de_theta
 w = codecs.open(model_param_writer_name + '.final', 'w')
+save_params(w, f_en_en_theta, f_en_de_theta, basic_f_en_en, basic_f_en_de, adaptation2id)
+'''
 f_en_en_theta = np.reshape(f_en_en_theta, (np.size(f_en_en_theta),))
 f_en_de_theta = np.reshape(f_en_de_theta, (np.size(f_en_de_theta),))
-w.write('en-en:' + ' '.join(basic_f_en_en) + '\n')
-w.write('en-en:' + ' '.join(['%0.6f' % i for i in f_en_en_theta.tolist()]) + '\n')
-w.write('en-de:' + ' '.join(basic_f_en_de) + '\n')
-w.write('en-de:' + ' '.join(['%0.6f' % i for i in f_en_de_theta.tolist()]) + '\n')
+en_en_names = basic_f_en_en
+en_en_adapt_names = [(0, 'original')] + sorted([(i, k) for k, i in adaptation2id.iteritems()])
+en_en_adapt_names = [sum((uname, basic), ()) for uname, basic in
+                     itertools.product([k for i, k in en_en_adapt_names], basic_f_en_en)]
+en_en_adapt_weights = np.reshape(f_en_en_theta, (len(en_en_adapt_names), len(basic_f_en_en)))
+
+en_de_names = basic_f_en_de
+en_de_adapt_names = [(0, 'original')] + sorted([(i, k) for k, i in adaptation2id.iteritems()])
+en_de_adapt_names = [sum((uname, basic), ()) for uname, basic in
+                     itertools.product([k for i, k in en_de_adapt_names], basic_f_en_de)]
+en_de_adapt_weights = np.reshape(f_en_de_theta, (len(en_de_adapt_names), len(basic_f_en_de)))
+w.write('\n'.join(en_en_adapt_names))
+w.write('\n')
+w.write(np.array_str(en_en_adapt_weights))
+
+w.write('\n'.join(en_de_adapt_names))
+w.write('\n')
+w.write(np.array_str(en_de_adapt_weights))
+
 w.flush()
 w.close()
+'''
