@@ -180,7 +180,7 @@ def batch_predictions(training_instance,
     j_ti = json.loads(training_instance)
     ti = TrainingInstance.from_dict(j_ti)
     sent_id = ti.current_sent[0].sent_id
-    sys.stderr.write('sent id:' + str(sent_id))
+    #sys.stderr.write('sent id:' + str(sent_id))
     # print 'in:', sent_id, theta_en_en, theta_en_de
     fg = create_factor_graph(ti=ti,
                              learning_rate=lr,
@@ -347,13 +347,12 @@ if __name__ == '__main__':
 
     # appending features for adaptation..
     print 'adding adaptation features...'
-    f_en_en_theta = np.ones((1, len(basic_f_en_en) * (len(adaptation2id) + 1)))
-    f_en_en_theta *= 0.2646
+    f_en_en_theta = np.zeros((1, len(basic_f_en_en) * (len(adaptation2id) + 1)))
     f_en_de_theta = np.zeros((1, len(basic_f_en_de) * (len(adaptation2id) + 1)))
-    old = np.array([4.74, 2.3359, 3.3745])
-    for o in range(len(adaptation2id) + 1):
-        st = o * len(basic_f_en_de)
-        f_en_de_theta[0, range(st, st + len(basic_f_en_de))] = old
+    #old = np.array([4.74, 2.3359, 3.3745])
+    #for o in range(len(adaptation2id) + 1):
+    #    st = o * len(basic_f_en_de)
+    #    f_en_de_theta[0, range(st, st + len(basic_f_en_de))] = old
     adapt_phi_en_en = array_utils.make_adapt_phi(phi_en_en, len(adaptation2id))
     adapt_phi_en_de = array_utils.make_adapt_phi(phi_en_de, len(adaptation2id))
     basic_phi_en_en = phi_en_en
