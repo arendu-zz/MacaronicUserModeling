@@ -99,12 +99,15 @@ def create_factor_graph(ti,
 
     # adapt
     user_id = ti.user_id
+    user_experience = 'novice'
+    '''
     if len(ti.past_sentences_seen) < 10:
         user_experience = 'novice'
-    elif len(ti.past_sentences_seen) < 40:
+    elif len(ti.past_sentences_seen) < 40
         user_experience = 'beginner'
     else:
         user_experience = 'familiar'
+    '''
     on_id = adaptation2id[user_id, user_experience]
     fg.phi_en_en = array_utils.set_adaptation(basic_phi_en_en, fg.phi_en_en, [on_id])
     fg.phi_en_de = array_utils.set_adaptation(basic_phi_en_de, fg.phi_en_de, [on_id])
@@ -306,7 +309,7 @@ if __name__ == '__main__':
     en2id = dict((e, idx) for idx, e in enumerate(en_domain))
     de2id = dict((d, idx) for idx, d in enumerate(de_domain))
     users = [i.strip() for i in codecs.open(options.user_list, 'r', 'utf8').readlines()]
-    experience = ['novice', 'beginner', 'familiar']
+    experience = ['novice']
     adaptation2id = {}
     for u, e in itertools.product(users, experience):
         adaptation2id[u, e] = len(adaptation2id) + 1
