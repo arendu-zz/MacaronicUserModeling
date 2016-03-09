@@ -3,6 +3,8 @@ import numpy as np
 import time
 from numpy import float32 as DTYPE
 
+np.set_printoptions(linewidth=300, precision=2)
+
 
 def pointwise_multiply(m1, m2):
     return np.multiply(m1, m2)
@@ -86,39 +88,43 @@ def ss_matix_multiply(s1, s2):
     return s1.dot(s2)
 
 
-if __name__ == '__main__':
-    domain = 3740
-    '''
-    a = np.random.randint(0, 10000, (domain * domain, 1))
-    a = a * 1.2
-    a = a / np.sum(a)
-    a = np.multiply(a, a)
-    b = np.random.randint(100, 1000, (5, domain * domain))
-    tt = time.time()
-    c = b.dot(a)
-    print ' no approx', time.time() - tt
-    tt = time.time()
-    c_approx_i, nz = induce_s_multiply_threshold(a, b)
-    print ' approx threshold:', time.time() - tt, np.size(nz)
-    for k in [10000, 1000, 100, 10]:
-        tt = time.time()
-        c_approx = induce_s_mutliply_clip(a, b, k=k)
-        print ' approx clip      :', time.time() - tt, k
+def make_adapt_phi(phi, num_adaptations):
+    adapt_phi = np.zeros((np.shape(phi)[0], np.shape(phi)[1] * (num_adaptations + 1)))
+    r = range(0, np.shape(phi)[1])
+    adapt_phi[:, r] = phi
+    return adapt_phi
 
-    a = np.random.randint(0, 10, (20, 1))
-    a -= 5
-    b = np.random.randint(0, 10, (20, 1))
-    k = 10
-    indices = (-np.abs(a)).argpartition(k, axis=None)[:k]
-    x, y = np.unravel_index(indices, a.shape)
-    print a
-    print b
-    print 'x', x
-    print 'y', y
-    print a[x, y], '<-- max in a'
-    print b[x, y]
-    c = np.zeros_like(a)
-    c[x, y] = a[x, y] * b[x, y]
-    print c
-    '''
-    a = np.random.randint(0, 10, (20, 1))
+
+def set_adaptation(phi, adapt_phi, active_adaptations):
+    f = np.shape(phi)[1]
+    for i in active_adaptations:
+        st = i * f
+        r = range(st, st + f)
+        adapt_phi[:, r] = phi
+    else:
+        pass
+    return adapt_phi
+
+
+def set_original(phi, adapt_phi):
+    r = range(0, np.shape(phi)[1])
+    adapt_phi[:, r] = phi
+    return adapt_phi
+
+
+if __name__ == '__main__':
+    s = 10
+    f = 4
+    u = 5
+    active_user = [1, 4]
+    ss2 = time.time()
+    phi = np.random.rand(s, f)
+    phi_off = np.zeros_like(phi)
+    adapt_phi = np.zeros((np.shape(phi)[0], np.shape(phi)[1] * (u + 1)))
+    adapt_phi = set_original(phi, adapt_phi)
+    adapt_phi = set_adaptation(phi, adapt_phi, [2, 3])
+    print adapt_phi
+    adapt_phi = set_adaptation(phi_off, adapt_phi, [2, 3])
+    print adapt_phi
+    adapt_phi = set_adaptation(phi, adapt_phi, [1, 3])
+    print adapt_phi
