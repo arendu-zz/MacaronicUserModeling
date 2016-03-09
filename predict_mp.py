@@ -14,7 +14,7 @@ from numpy import float32 as DTYPE
 from scipy import sparse
 from multiprocessing import Pool
 
-global f_en_en_theta, f_en_de_theta, prediction_probs, writer, n_up
+global f_en_en_theta, f_en_de_theta, writer, n_up
 n_up = 0
 np.seterr(divide='raise', over='raise', under='ignore')
 
@@ -155,16 +155,18 @@ def batch_predictions(training_instance, theta_en_en, theta_en_de, phi_en_en, ph
 
     fg.initialize()
     fg.treelike_inference(3)
-    return fg.get_posterior_probs()
+    probs_on_label = fg.get_posterior_probs()
+    label_top_guesses = fg.get_max_postior_label(top=15)
+    return [sent_id, probs_on_label, '\n'.join(label_top_guesses)]
 
 
-def batch_prediction_probs_accumulate(p):
-    global prediction_probs, n_up
-    prediction_probs += p
-    if n_up % 10 == 0:
-        writer.write(str(n_up) + ' pred prob:' + str(prediction_probs) + '\n')
-        writer.flush()
-    n_up += 1
+def batch_prediction_probs_accumulate(result):
+    sent_id = result[0]
+    p = result[1]
+    str_label_top_guesses = result[2]
+    # writer.write('sentence id:' + str(sent_id) + ' label prob:' + '%0.4f' % p + '\n')
+    writer.write(str_label_top_guesses + '\n')
+    writer.flush()
 
 
 def batch_sgd(training_instance, theta_en_en, theta_en_de, phi_en_en, phi_en_de, lr, en_domain, de2id, en2id):
@@ -202,20 +204,21 @@ def batch_sgd_accumulate(result):
 
 
 if __name__ == '__main__':
-    global f_en_en_theta, f_en_de_theta, prediction_probs, writer, n_up
+    global f_en_en_theta, f_en_de_theta, writer
 
     opt = OptionParser()
     # insert options here
-    opt.add_option('--ti', dest='training_instances', default='')
+    opt.add_option('--ti', dest='eval_instances', default='')
     opt.add_option('--end', dest='en_domain', default='')
     opt.add_option('--ded', dest='de_domain', default='')
     opt.add_option('--phi_wiwj', dest='phi_wiwj', default='')
     opt.add_option('--phi_ed', dest='phi_ed', default='')
     opt.add_option('--phi_ped', dest='phi_ped', default='')
+    opt.add_option('--params', dest='learned_params', default='')
     opt.add_option('--cpu', dest='cpus', default='')
     (options, _) = opt.parse_args()
 
-    if options.training_instances == '' or options.en_domain == '' or options.de_domain == '' or options.phi_wiwj == '' or options.phi_ed == '' or options.phi_ped == '':
+    if options.eval_instances == '' or options.en_domain == '' or options.de_domain == '' or options.phi_wiwj == '' or options.phi_ed == '' or options.phi_ped == '':
         sys.stderr.write(
             'Usage: python real_phi_test.py\n\
                     --ti [training instance file]\n \
@@ -232,10 +235,10 @@ if __name__ == '__main__':
     cpu_count = 4 if options.cpus.strip() == '' else int(options.cpus)
     print 'cpu count:', cpu_count
     print 'reading in  ti and domains...'
-    training_instances = codecs.open(options.training_instances).readlines()
+    eval_instances = codecs.open(options.eval_instances).readlines()
     t_now = '-'.join(ctime().split())
-    model_param_writer_name = options.training_instances + '.cpu' + str(cpu_count) + '.' + t_now + '.params'
-    writer = open(model_param_writer_name, 'w')
+    model_param_writer_name = options.eval_instances + '.cpu' + str(cpu_count) + '.' + t_now + '.predictions'
+    writer = codecs.open(model_param_writer_name, 'w', 'utf8')
     de_domain = [i.strip() for i in codecs.open(options.de_domain, 'r', 'utf8').readlines()]
     en_domain = [i.strip() for i in codecs.open(options.en_domain, 'r', 'utf8').readlines()]
     en2id = dict((e, idx) for idx, e in enumerate(en_domain))
@@ -244,10 +247,11 @@ if __name__ == '__main__':
     # en_domain = ['en_' + str(i) for i in range(500)]
     # de_domain = ['de_' + str(i) for i in range(100)]
     print 'read ti and domains...'
-    f_en_en_names = ['skipgram']
+    f_en_en = ['f1']
 
-    # f_en_en_theta = np.random.rand(1, len(f_en_en)) - 0.5  # zero mean random values
-    f_en_en_theta = np.zeros((1, len(f_en_en_names)))
+    f_en_en_theta = np.random.rand(1, len(f_en_en)) - 0.5  # zero mean random values
+    #f_en_en_theta = np.array([[0.2620]])
+    # [[ 1.3404]] [[ 4.6798  2.5449  3.2071]]
     print 'reading phi wiwj'
     phi_en_en1 = np.loadtxt(options.phi_wiwj)
     phi_en_en1[phi_en_en1 < 2.0 / len(en_domain)] = 0.0  # make sparse...
@@ -257,9 +261,9 @@ if __name__ == '__main__':
     phi_en_en = np.concatenate((phi_en_en1,), axis=1)
     phi_en_en.astype(DTYPE)
 
-    f_en_de_names = ['ed', 'ped', 'history']
-    # f_en_de_theta = np.random.rand(1, len(f_en_de)) - 0.5  # zero mean random values
-    f_en_de_theta = np.zeros((1, len(f_en_de_names)))
+    f_en_de = ['ed', 'ped', 'history']
+    f_en_de_theta = np.random.rand(1, len(f_en_de)) - 0.5  # zero mean random values
+    #f_en_de_theta = np.array([[4.6798, 2.5449, 3.2071]])
     print 'reading phi ed'
     phi_en_de1 = np.loadtxt(options.phi_ed)
     phi_en_de1[phi_en_de1 < 0.5] = 0.0
@@ -273,66 +277,16 @@ if __name__ == '__main__':
     phi_en_de = np.concatenate((phi_en_de1, phi_en_de2, phi_en_de3), axis=1)
     phi_en_de.astype(DTYPE)
 
-    split_ratio = int(len(training_instances) * 0.1)
-    test_instances = training_instances[:split_ratio]
-    all_training_instances = training_instances[split_ratio:]
-    prediction_probs = 0.0
-    lr = 0.1
     pool = Pool(processes=cpu_count)
-    for ti in test_instances:
+    for ti in eval_instances:
         pool.apply_async(batch_predictions, args=(
             ti,
             f_en_en_theta,
             f_en_de_theta,
             phi_en_en,
-            phi_en_de, lr,
+            phi_en_de, 0.1,
             en_domain,
             de2id,
             en2id), callback=batch_prediction_probs_accumulate)
     pool.close()
     pool.join()
-    print '\nprediction probs:', prediction_probs
-    for epoch in range(2):
-        lr = 0.05
-        print 'epoch:', epoch, 'theta:', f_en_en_theta, f_en_de_theta
-        random.shuffle(all_training_instances)
-        pool = Pool(processes=cpu_count)
-        for ti in all_training_instances:
-            pool.apply_async(batch_sgd, args=(
-                ti,
-                f_en_en_theta,
-                f_en_de_theta,
-                phi_en_en,
-                phi_en_de, lr,
-                en_domain,
-                de2id,
-                en2id), callback=batch_sgd_accumulate)
-        pool.close()
-        pool.join()
-        print '\nepoch:', epoch, f_en_en_theta, f_en_de_theta
-        prediction_probs = 0.0
-        pool = Pool(processes=cpu_count)
-        for ti in test_instances:
-            pool.apply_async(batch_predictions, args=(
-                ti,
-                f_en_en_theta,
-                f_en_de_theta,
-                phi_en_en,
-                phi_en_de, lr,
-                en_domain,
-                de2id,
-                en2id), callback=batch_prediction_probs_accumulate)
-        pool.close()
-        pool.join()
-        lr *= 0.5
-        print '\nprediction probs:', prediction_probs
-print '\ntheta final:', f_en_en_theta, f_en_de_theta
-w = codecs.open(model_param_writer_name + '.final', 'w')
-f_en_en_theta = np.reshape(f_en_en_theta, (np.size(f_en_en_theta),))
-f_en_de_theta = np.reshape(f_en_de_theta, (np.size(f_en_de_theta),))
-w.write('en-en:' + ' '.join(f_en_en_names) + '\n')
-w.write('en-en:' + ' '.join(['%0.6f' % i for i in f_en_en_theta.tolist()]) + '\n')
-w.write('en-de:' + ' '.join(f_en_de_names) + '\n')
-w.write('en-de:' + ' '.join(['%0.6f' % i for i in f_en_de_theta.tolist()]) + '\n')
-w.flush()
-w.close()
