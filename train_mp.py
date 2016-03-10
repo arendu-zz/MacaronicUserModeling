@@ -89,9 +89,9 @@ def create_factor_graph(ti, learning_rate, theta_en_en, theta_en_de, phi_en_en, 
     for pg in ti.past_correct_guesses:
         i = en2id[pg.guess]
         j = de2id[pg.l2_word]
-        history_feature[i, :] += 1.0
-        history_feature[:, j] += 1.0
-        history_feature[i, j] += 1.0
+        history_feature[i, :] -= 0.01
+        history_feature[:, j] -= 0.01
+        history_feature[i, j] += 1.01
     history_feature = np.reshape(history_feature, (np.shape(fg.phi_en_de)[0],))
     fg.phi_en_de[:, -1] = history_feature
 
