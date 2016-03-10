@@ -33,18 +33,22 @@ def find_guess(simplenode_id, guess_list):
 
 def save_params(w, ee_theta, ed_theta, ee_names, ed_names, domain2theta):
     w.write('\t'.join(['EE_F:'] + ee_names) + '\n')
-    n_o = ['Original'] + [str(i) for i in ee_theta.tolist()]
+    fl = [item for sublist in ee_theta.tolist() for item in sublist]
+    n_o = ['Original'.ljust(15)] + ['%0.6f' % i for i in fl]
     w.write('\t'.join(n_o) + '\n')
     for f_type, u in domain2theta:
         if f_type == 'en_en':
-            n_o = [u] + [str(i) for i in domain2theta[f_type, u].tolist()]
+            fl = [item for sublist in domain2theta[f_type, u].tolist() for item in sublist]
+            n_o = [u.ljust(15)] + ['%0.6f' % i for i in fl]
             w.write('\t'.join(n_o) + '\n')
     w.write('\t'.join(['ED_F:'] + ed_names) + '\n')
-    n_o = ['Original'] + [str(i) for i in ed_theta.tolist()]
+    fl = [item for sublist in ed_theta.tolist() for item in sublist]
+    n_o = ['Original'.ljust(15)] + ['%0.6f' % i for i in fl]
     w.write('\t'.join(n_o) + '\n')
     for f_type, u in domain2theta:
         if f_type == 'en_de':
-            n_o = [u] + [str(i) for i in domain2theta[f_type, u].tolist()]
+            fl = [item for sublist in domain2theta[f_type, u].tolist() for item in sublist]
+            n_o = [u.ljust(15)] + ['%0.6f' % i for i in fl]
             w.write('\t'.join(n_o) + '\n')
     w.flush()
     w.close()
@@ -271,7 +275,7 @@ def batch_sgd(training_instance,
         t = domain2theta[f_type, u]
         r = fg.regularization_param
         l = fg.learning_rate
-        sample_ag[f_type, u] = apply_regularization(r, g, l, t)
+        sample_ag[f_type, u] = apply_regularization(r * 0.01, g, l, t)  # use a smaller regularization term
     g_en_en = apply_regularization(r, g_en_en, l, fg.theta_en_en)
     g_en_de = apply_regularization(r, g_en_de, l, fg.theta_en_de)
     # turn off adapt_phi
@@ -286,7 +290,7 @@ def batch_sgd_accumulate(result):
     for f_type, u in sample_ag:
         ag = sample_ag[f_type, u]
         domain2theta[f_type, u] += ag
-    if n_up % 10 == 0:
+    if n_up % 100 == 0:
         writer.write(str(n_up) + ' ' + np.array_str(f_en_en_theta) + ' ' + np.array_str(f_en_de_theta) + '\n')
         writer.flush()
     n_up += 1
@@ -326,9 +330,7 @@ if __name__ == '__main__':
     print 'cpu count:', cpu_count
     print 'reading in  ti and domains...'
     training_instances = codecs.open(options.training_instances).readlines()
-    t_now = '-'.join(ctime().split())
-    model_param_writer_name = options.training_instances + '.cpu' + str(cpu_count) + '.' + t_now + '.adapt.params'
-    writer = open(model_param_writer_name, 'w')
+
     de_domain = [i.strip() for i in codecs.open(options.de_domain, 'r', 'utf8').readlines()]
     en_domain = [i.strip() for i in codecs.open(options.en_domain, 'r', 'utf8').readlines()]
     en2id = dict((e, idx) for idx, e in enumerate(en_domain))
@@ -340,7 +342,7 @@ if __name__ == '__main__':
     f_en_en_theta = np.zeros((1, len(basic_f_en_en)))
     print 'reading phi wiwj'
     phi_en_en1 = np.loadtxt(options.phi_wiwj)
-    phi_en_en1[phi_en_en1 < 2.0 / len(en_domain)] = 0.0  # make sparse...
+    phi_en_en1[phi_en_en1 < 1.0 / len(en_domain)] = 0.0  # make sparse...
     print np.count_nonzero(phi_en_en1)
     phi_en_en1 = np.reshape(phi_en_en1, (len(en_domain) * len(en_domain), 1))
     ss = np.shape(phi_en_en1)
@@ -375,8 +377,12 @@ if __name__ == '__main__':
     prediction_probs = 0.0
     lr = 0.1
 
+    t_now = '-'.join(ctime().split())
+    model_param_writer_name = options.training_instances + '.cpu' + str(cpu_count) + '.' + t_now + '.adapt.params'
+    writer = open(model_param_writer_name, 'w')
     w = codecs.open(model_param_writer_name + '.init', 'w')
     save_params(w, f_en_en_theta, f_en_de_theta, basic_f_en_en, basic_f_en_de, domain2theta)
+
     pool = Pool(processes=cpu_count)
     for ti in test_instances:
         pool.apply_async(batch_predictions, args=(
@@ -435,6 +441,6 @@ if __name__ == '__main__':
         lr *= 0.5
         print '\nprediction probs:', prediction_probs
 
-print '\ntheta final:', f_en_en_theta, f_en_de_theta
-w = codecs.open(model_param_writer_name + '.final', 'w')
-save_params(w, f_en_en_theta, f_en_de_theta, basic_f_en_en, basic_f_en_de, domain2theta)
+    print '\ntheta final:', f_en_en_theta, f_en_de_theta
+    w = codecs.open(model_param_writer_name + '.final', 'w')
+    save_params(w, f_en_en_theta, f_en_de_theta, basic_f_en_en, basic_f_en_de, domain2theta)
