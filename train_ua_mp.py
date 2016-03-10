@@ -419,7 +419,7 @@ if __name__ == '__main__':
     pool.close()
     pool.join()
     print '\nprediction probs:', prediction_probs
-    for epoch in range(2):
+    for epoch in range(1):
         lr = 0.05
         print 'epoch:', epoch, 'theta:', f_en_en_theta, f_en_de_theta
         random.shuffle(all_training_instances)
@@ -463,28 +463,3 @@ if __name__ == '__main__':
 print '\ntheta final:', f_en_en_theta, f_en_de_theta
 w = codecs.open(model_param_writer_name + '.final', 'w')
 save_params(w, f_en_en_theta, f_en_de_theta, basic_f_en_en, basic_f_en_de, adaptation2id)
-'''
-f_en_en_theta = np.reshape(f_en_en_theta, (np.size(f_en_en_theta),))
-f_en_de_theta = np.reshape(f_en_de_theta, (np.size(f_en_de_theta),))
-en_en_names = basic_f_en_en
-en_en_adapt_names = [(0, 'original')] + sorted([(i, k) for k, i in adaptation2id.iteritems()])
-en_en_adapt_names = [sum((uname, basic), ()) for uname, basic in
-                     itertools.product([k for i, k in en_en_adapt_names], basic_f_en_en)]
-en_en_adapt_weights = np.reshape(f_en_en_theta, (len(en_en_adapt_names), len(basic_f_en_en)))
-
-en_de_names = basic_f_en_de
-en_de_adapt_names = [(0, 'original')] + sorted([(i, k) for k, i in adaptation2id.iteritems()])
-en_de_adapt_names = [sum((uname, basic), ()) for uname, basic in
-                     itertools.product([k for i, k in en_de_adapt_names], basic_f_en_de)]
-en_de_adapt_weights = np.reshape(f_en_de_theta, (len(en_de_adapt_names), len(basic_f_en_de)))
-w.write('\n'.join(en_en_adapt_names))
-w.write('\n')
-w.write(np.array_str(en_en_adapt_weights))
-
-w.write('\n'.join(en_de_adapt_names))
-w.write('\n')
-w.write(np.array_str(en_de_adapt_weights))
-
-w.flush()
-w.close()
-'''
