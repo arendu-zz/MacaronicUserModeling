@@ -91,7 +91,7 @@ def create_factor_graph(ti, learning_rate, theta_en_en, theta_en_de, phi_en_en, 
         j = de2id[pg.l2_word]
         history_feature[i, :] -= 0.01
         history_feature[:, j] -= 0.01
-        history_feature[i, j] += 1.01
+        history_feature[i, j] += 1.02
     history_feature = np.reshape(history_feature, (np.shape(fg.phi_en_de)[0],))
     fg.phi_en_de[:, -1] = history_feature
 
