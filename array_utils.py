@@ -135,14 +135,5 @@ if __name__ == '__main__':
     phi_off = np.zeros_like(phi)
     adapt_phi = np.zeros((np.shape(phi)[0], np.shape(phi)[1] * (u + 1)))
     adapt_phi = set_original(phi, adapt_phi)
-    adapt_phi = sparse.lil_matrix(adapt_phi)
-    tmp = np.random.rand(s, 1)
-    print np.shape(adapt_phi), np.shape(tmp), type(adapt_phi), type(tmp)
-    adapt_phi[:, 3] = tmp
-    tmp2 = adapt_phi
-    adapt_phi = set_adaptation(f, adapt_phi, [2, 3])
-    print adapt_phi
-    adapt_phi = set_adaptation_off(f, adapt_phi, [2, 3])
-    print adapt_phi
     adapt_phi = set_adaptation(f, adapt_phi, [1, 3])
     print adapt_phi

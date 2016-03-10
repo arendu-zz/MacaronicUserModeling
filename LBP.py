@@ -32,6 +32,7 @@ class FactorGraph():
         self.cg_times = []
         self.gg_times = []
         self.sgg_times = []
+        self.active_domains = {}
 
     def add_factor(self, fac):
         if __debug__: assert fac not in self.factors
@@ -169,6 +170,14 @@ class FactorGraph():
                 self.variables[vi - 1].update_message_to(self.factors[fii - 1])
 
     def get_gradient(self):
+        grad_en_en, grad_en_de = self.get_unregularized_gradeint()
+        reg_en_de = self.regularization_param * self.theta_en_de
+        reg_en_en = self.regularization_param * self.theta_en_en
+        grad_en_en -= reg_en_en
+        grad_en_de -= reg_en_de
+        return grad_en_de, grad_en_en
+
+    def get_unregularized_gradeint(self):
         grad_en_de = np.zeros_like(self.theta_en_de)
         grad_en_en = np.zeros_like(self.theta_en_en)
         for f in self.factors:
@@ -178,29 +187,22 @@ class FactorGraph():
                 grad_en_de += f.get_gradient()
             else:
                 raise BaseException('only 2 kinds of factors allowed...')
-        # print 'current theta :', self.theta_en_de, self.theta_en_en
-        reg_en_de = self.regularization_param * self.theta_en_de
-        reg_en_en = self.regularization_param * self.theta_en_en
-        # print 'current reg   :', reg_en_de, reg_en_en
-        # print 'current grad  :', grad_en_de, grad_en_en
-        # grad_en_en = grad_en_en
-        # grad_en_de = grad_en_de
-        grad_en_en -= reg_en_en
-        grad_en_de -= reg_en_de
-        # print 'reg grad      :', grad_en_de, grad_en_en
-        return grad_en_de, grad_en_en
+        return grad_en_en, grad_en_de
+
+    def return_gradient(self):
+        # adds learning rate to regularized gradient
+        grad_en_de, grad_en_en = self.get_gradient()
+        g_en_en = self.learning_rate * grad_en_en
+        g_en_de = self.learning_rate * grad_en_de
+        return g_en_en, g_en_de
+
+
 
     def update_theta(self):
         grad_en_de, grad_en_en = self.get_gradient()
         self.theta_en_en += (self.learning_rate * grad_en_en)
         self.theta_en_de += (self.learning_rate * grad_en_de)
         return self.theta_en_en, self.theta_en_de
-
-    def return_gradient(self):
-        grad_en_de, grad_en_en = self.get_gradient()
-        g_en_en = self.learning_rate * grad_en_en
-        g_en_de = self.learning_rate * grad_en_de
-        return g_en_en, g_en_de
 
 
 class VariableNode():
@@ -314,6 +316,7 @@ class FactorNode():
         else:
             raise BaseException("only two kinds of potentials are supported...")
 
+    '''
     def get_theta(self):
         if self.factor_type == 'en_en':
             return self.graph.theta_en_en
@@ -321,6 +324,7 @@ class FactorNode():
             return self.graph.theta_en_de
         else:
             raise BaseException("only 2 factor types are supported right now..")
+    '''
 
     def get_phi(self):
         if self.factor_type == 'en_en':

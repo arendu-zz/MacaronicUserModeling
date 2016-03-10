@@ -179,7 +179,7 @@ if __name__ == '__main__':
     phi_en_en1 = np.reshape(phi_en_en1, (len(en_domain) * len(en_domain), 1))
     phi_en_en = np.concatenate((phi_en_en1,), axis=1)
     phi_en_en.astype(DTYPE)
-    phi_en_en = sparse.lil_matrix(phi_en_en)
+
 
     f_en_de = ['x', 'y', 'history']
     # f_en_de_theta = np.random.rand(1, len(f_en_de)) - 0.5  # zero mean random values
@@ -199,7 +199,7 @@ if __name__ == '__main__':
     phi_en_de3 = np.zeros_like(phi_en_de1)
     phi_en_de = np.concatenate((phi_en_de1, phi_en_de2, phi_en_de3), axis=1)
     phi_en_de.astype(DTYPE)
-    phi_en_de = sparse.lil_matrix(phi_en_de)
+
 
     fg = None
     split_ratio = int(len(training_instances) * 0.33)
