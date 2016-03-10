@@ -119,9 +119,9 @@ def create_factor_graph(ti,
     for pg in ti.past_correct_guesses:
         i = en2id[pg.guess]
         j = de2id[pg.l2_word]
-        history_feature[i, :] += 1.0
-        history_feature[:, j] += 1.0
-        history_feature[i, j] += 1.0
+        history_feature[i, :] -= 0.01
+        history_feature[:, j] -= 0.01
+        history_feature[i, j] += 1.01
     history_feature = np.reshape(history_feature, (np.shape(fg.phi_en_de)[0],))
     # print 'here'
     # print basic_f_en_de.index('history')
@@ -270,11 +270,11 @@ def batch_sgd(training_instance,
 
     sample_ag = {}
     for f_type, u in fg.active_domains:
-        g = g_en_en if f_type == 'en_en' else g_en_de
+        g = g_en_en.copy() if f_type == 'en_en' else g_en_de.copy()
         t = domain2theta[f_type, u]
         r = fg.regularization_param
         l = fg.learning_rate
-        sample_ag[f_type, u] = apply_regularization(r, g, l, t)  # use a smaller regularization term
+        sample_ag[f_type, u] = apply_regularization(r * 0.001, g, l, t)  # use a smaller regularization term
     g_en_en = apply_regularization(r, g_en_en, l, fg.theta_en_en)
     g_en_de = apply_regularization(r, g_en_de, l, fg.theta_en_de)
     # turn off adapt_phi
