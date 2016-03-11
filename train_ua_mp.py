@@ -121,7 +121,7 @@ def create_factor_graph(ti,
         j = de2id[pg.l2_word]
         history_feature[i, :] -= 0.01
         history_feature[:, j] -= 0.01
-        history_feature[i, j] += 1.01
+        history_feature[i, j] += 1.02
     history_feature = np.reshape(history_feature, (np.shape(fg.phi_en_de)[0],))
     # print 'here'
     # print basic_f_en_de.index('history')

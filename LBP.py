@@ -34,6 +34,21 @@ class FactorGraph():
         self.sgg_times = []
         self.active_domains = {}
 
+    def to_string(self):
+        position_factors = sorted([(f.position, f) for f in self.factors if f.position is not None])
+        fg_dct = {}
+        for p, f in position_factors:
+            if f.factor_type == 'en_de':
+                de_label = f.word_label
+                sl, slp, pred = f.varset[0].get_max_vocab(15)
+                pred = ' '.join([p1 + ' ' + p2 for p1, p2 in pred])
+                fg_dct[p] = ' '.join([de_label, sl, slp, pred])
+            if f.factor_type == 'en_en':
+                guess_label = f.word_label
+                fg_dct[p] = ' '.join(['', guess_label, ''])
+        fg_strings = [fg_dct[k] for k in sorted(fg_dct)]
+        return fg_strings
+
     def add_factor(self, fac):
         if __debug__: assert fac not in self.factors
         self.factors.append(fac)
@@ -196,8 +211,6 @@ class FactorGraph():
         g_en_de = self.learning_rate * grad_en_de
         return g_en_en, g_en_de
 
-
-
     def update_theta(self):
         grad_en_de, grad_en_en = self.get_gradient()
         self.theta_en_en += (self.learning_rate * grad_en_en)
@@ -281,6 +294,8 @@ class FactorNode():
         self.observed_domain_type = observed_domain_type
         self.observed_value = observed_value
         self.observed_domain_size = observed_domain_size
+        self.position = None
+        self.word_label = None
 
     def __str__(self):
         return 'F_' + str(self.id)

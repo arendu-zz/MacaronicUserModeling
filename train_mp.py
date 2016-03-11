@@ -14,11 +14,25 @@ from numpy import float32 as DTYPE
 from scipy import sparse
 from multiprocessing import Pool
 
-global f_en_en_theta, f_en_de_theta, prediction_probs, writer, n_up
+global f_en_en_theta, f_en_de_theta, prediction_probs, intermediate_writer, prediction_str, final_writer, n_up
 n_up = 0
 np.seterr(divide='raise', over='raise', under='ignore')
 
 np.set_printoptions(precision=4, suppress=True)
+
+
+def error_msg():
+    sys.stderr.write(
+        'Usage: python real_phi_test.py\n\
+                --ti [training instance file]\n \
+                --end [en domain file]\n \
+                --ded [de domain file]\n \
+                --phi_wiwj [wiwj file]\n \
+                --phi_ed [ed file]\n \
+                --phi_ped [ped file]\n \
+                --cpu [4 by default]\n \
+                --save_params [save params to this file] or \n \
+                --load_params [load params from this file]] --save_predictions [save predictions to file]\n')
 
 
 def find_guess(simplenode_id, guess_list):
@@ -27,6 +41,19 @@ def find_guess(simplenode_id, guess_list):
             guess = cg
             return guess
     return None
+
+
+def read_params(params_file):
+    p1, p2 = codecs.open(params_file, 'r', 'utf8').read().split('ED_F:')
+    _, p1 = p1.split('EE_F:')
+    p1_lines = p1.split('\n')
+    een = p1_lines[0].split()
+    eet = np.array([float(i) for i in p1_lines[1].split()[1:]])
+    p2_lines = p2.split('\n')
+    edn = p2_lines[0].split()
+    edt = np.array([float(i) for i in p2_lines[1].split()[1:]])
+    print 'loaded params...'
+    return een, eet, edn, edt
 
 
 def save_params(w, ee_theta, ed_theta, ee_names, ed_names):
@@ -91,7 +118,7 @@ def create_factor_graph(ti, learning_rate, theta_en_en, theta_en_de, phi_en_en, 
         j = de2id[pg.l2_word]
         history_feature[i, :] -= 0.01
         history_feature[:, j] -= 0.01
-        history_feature[i, j] += 1.01
+        history_feature[i, j] += 1.02
     history_feature = np.reshape(history_feature, (np.shape(fg.phi_en_de)[0],))
     fg.phi_en_de[:, -1] = history_feature
 
@@ -114,6 +141,8 @@ def create_factor_graph(ti, learning_rate, theta_en_en, theta_en_de, phi_en_en, 
             o_idx = de2id[simplenode.l2_word]
             p = PotentialTable(v_id2dim={v.id: 0}, table=None, observed_dim=o_idx)
             f.add_varset_with_potentials(varset=[v], ptable=p)
+            f.position = v.id
+            f.word_label = simplenode.l2_word
             factors.append(f)
         elif v.var_type == VAR_TYPE_GIVEN:
             pass
@@ -126,6 +155,8 @@ def create_factor_graph(ti, learning_rate, theta_en_en, theta_en_de, phi_en_en, 
                 f = FactorNode(id=len(factors), factor_type='en_en')
                 p = PotentialTable(v_id2dim={v1.id: 0, v2.id: 1}, table=None, observed_dim=None)
                 f.add_varset_with_potentials(varset=[v1, v2], ptable=p)
+                f.position = None
+                f.word_label = None
                 factors.append(f)
             elif v1.var_type == VAR_TYPE_GIVEN and v2.var_type == VAR_TYPE_GIVEN:
                 pass
@@ -139,6 +170,8 @@ def create_factor_graph(ti, learning_rate, theta_en_en, theta_en_de, phi_en_en, 
                 o_idx = en2id[v_given.supervised_label]  # either a users guess OR a revealed word -> see line 31,36
                 p = PotentialTable(v_id2dim={v_pred.id: 0}, table=None, observed_dim=o_idx)
                 f.add_varset_with_potentials(varset=[v_pred], ptable=p)
+                f.position = v_given.id
+                f.word_label = v_given.supervised_label
                 factors.append(f)
             pass
 
@@ -154,8 +187,6 @@ def batch_predictions(training_instance, theta_en_en, theta_en_de, phi_en_en, ph
     j_ti = json.loads(training_instance)
     ti = TrainingInstance.from_dict(j_ti)
     sent_id = ti.current_sent[0].sent_id
-    # sys.stderr.write('sent id:' + str(sent_id))
-    # print 'in:', sent_id, theta_en_en, theta_en_de
     fg = create_factor_graph(ti=ti,
                              learning_rate=lr,
                              theta_en_de=theta_en_de,
@@ -168,16 +199,19 @@ def batch_predictions(training_instance, theta_en_en, theta_en_de, phi_en_en, ph
 
     fg.initialize()
     fg.treelike_inference(3)
-    return fg.get_posterior_probs()
+    p = fg.get_posterior_probs()
+    fgs = '\n'.join(['*SENT_ID:' + str(sent_id)] + fg.to_string())
+    return [p, fgs]
 
 
-def batch_prediction_probs_accumulate(p):
-    global prediction_probs, n_up
-    prediction_probs += p
-    if n_up % 100 == 0:
-        writer.write(str(n_up) + ' pred prob:' + str(prediction_probs) + '\n')
-        writer.flush()
-    n_up += 1
+def batch_prediction_probs_accumulate(result):
+    global prediction_probs, intermediate_writer, prediction_str, n_up
+    prediction_probs += result[0]
+    fgs = result[1]
+    if prediction_str is not None:
+        prediction_str = prediction_str + fgs + '\n'
+    else:
+        prediction_str = fgs + '\n'
 
 
 def batch_sgd(training_instance, theta_en_en, theta_en_de, phi_en_en, phi_en_de, lr, en_domain, de2id, en2id):
@@ -208,14 +242,15 @@ def batch_sgd_accumulate(result):
     f_en_en_theta += result[1]
     f_en_de_theta += result[2]
     if n_up % 10 == 0:
-        writer.write(str(n_up) + ' ' + np.array_str(f_en_en_theta) + ' ' + np.array_str(f_en_de_theta) + '\n')
-        writer.flush()
+        intermediate_writer.write(
+            str(n_up) + ' ' + np.array_str(f_en_en_theta) + ' ' + np.array_str(f_en_de_theta) + '\n')
+        intermediate_writer.flush()
     n_up += 1
     # print 'received', result[0], f_en_en_theta, f_en_de_theta
 
 
 if __name__ == '__main__':
-    global f_en_en_theta, f_en_de_theta, prediction_probs, writer, n_up
+    global f_en_en_theta, f_en_de_theta, prediction_probs, prediction_str, intermediate_writer, n_up
 
     opt = OptionParser()
     # insert options here
@@ -226,24 +261,36 @@ if __name__ == '__main__':
     opt.add_option('--phi_ed', dest='phi_ed', default='')
     opt.add_option('--phi_ped', dest='phi_ped', default='')
     opt.add_option('--cpu', dest='cpus', default='')
+    opt.add_option('--save_params', dest='save_params_file', default='')
+    opt.add_option('--load_params', dest='load_params_file', default='')
+    opt.add_option('--save_predictions', dest='save_predictions_file', default='')
     (options, _) = opt.parse_args()
 
     if options.training_instances == '' or options.en_domain == '' or options.de_domain == '' or options.phi_wiwj == '' or options.phi_ed == '' or options.phi_ped == '':
-        sys.stderr.write(
-            'Usage: python real_phi_test.py\n\
-                    --ti [training instance file]\n \
-                    --end [en domain file]\n \
-                    --ded [de domain file]\n \
-                    --phi_wiwj [wiwj file]\n \
-                    --phi_ed [ed file]\n \
-                    --phi_ped [ped file]\n'
-            '--cpu [4 by default]\n')
+        error_msg()
+        exit(1)
+    elif options.save_params_file == '' and options.load_params_file == '' and options.save_predictions_file == '':
+        error_msg()
         exit(1)
     else:
         pass
 
     cpu_count = 4 if options.cpus.strip() == '' else int(options.cpus)
     print 'cpu count:', cpu_count
+    mode = 'training' if options.load_params_file == '' else 'predicting'
+    if mode == 'training':
+        f_en_en_names = ['skipgram']
+        f_en_en_theta = np.zeros((1, len(f_en_en_names)))
+        f_en_de_names = ['ed', 'ped', 'history']
+        f_en_de_theta = np.zeros((1, len(f_en_de_names)))
+    else:
+        een, eet, edn, edt = read_params(options.load_params_file)
+        save_predictions_file = options.save_predictions_file
+        f_en_en_names = een
+        f_en_en_theta = eet
+        f_en_de_names = edn
+        f_en_de_theta = edt
+
     print 'reading in  ti and domains...'
     training_instances = codecs.open(options.training_instances).readlines()
 
@@ -253,10 +300,6 @@ if __name__ == '__main__':
     de2id = dict((d, idx) for idx, d in enumerate(de_domain))
     print len(en_domain), len(de_domain)
 
-    print 'read ti and domains...'
-    f_en_en_names = ['skipgram']
-
-    f_en_en_theta = np.zeros((1, len(f_en_en_names)))
     print 'reading phi wiwj'
     phi_en_en1 = np.loadtxt(options.phi_wiwj)
     phi_en_en1[phi_en_en1 < 1.0 / len(en_domain)] = 0.0  # make sparse...
@@ -266,9 +309,6 @@ if __name__ == '__main__':
     phi_en_en = np.concatenate((phi_en_en1,), axis=1)
     phi_en_en.astype(DTYPE)
 
-    f_en_de_names = ['ed', 'ped', 'history']
-    # f_en_de_theta = np.random.rand(1, len(f_en_de)) - 0.5  # zero mean random values
-    f_en_de_theta = np.zeros((1, len(f_en_de_names)))
     print 'reading phi ed'
     phi_en_de1 = np.loadtxt(options.phi_ed)
     phi_en_de1[phi_en_de1 < 0.5] = 0.0
@@ -283,51 +323,43 @@ if __name__ == '__main__':
     phi_en_de.astype(DTYPE)
 
     split_ratio = int(len(training_instances) * 0.1)
-    test_instances = training_instances[:split_ratio]
-    all_training_instances = training_instances[split_ratio:]
-    prediction_probs = 0.0
-    lr = 0.1
+
     t_now = '-'.join(ctime().split())
     model_param_writer_name = options.training_instances + '.cpu' + str(cpu_count) + '.' + t_now + '.params'
-    writer = open(model_param_writer_name, 'w')
-    w = codecs.open(model_param_writer_name + '.init', 'w')
-    save_params(w, f_en_en_theta, f_en_de_theta, f_en_en_names, f_en_de_names)
-
-    pool = Pool(processes=cpu_count)
-    for ti in test_instances:
-        pool.apply_async(batch_predictions, args=(
-            ti,
-            f_en_en_theta,
-            f_en_de_theta,
-            phi_en_en,
-            phi_en_de, lr,
-            en_domain,
-            de2id,
-            en2id), callback=batch_prediction_probs_accumulate)
-    pool.close()
-    pool.join()
-    print '\nprediction probs:', prediction_probs
-    for epoch in range(2):
-        lr = 0.05
-        print 'epoch:', epoch, 'theta:', f_en_en_theta, f_en_de_theta
-        random.shuffle(all_training_instances)
-        pool = Pool(processes=cpu_count)
-        for ti in all_training_instances:
-            pool.apply_async(batch_sgd, args=(
-                ti,
-                f_en_en_theta,
-                f_en_de_theta,
-                phi_en_en,
-                phi_en_de, lr,
-                en_domain,
-                de2id,
-                en2id), callback=batch_sgd_accumulate)
-        pool.close()
-        pool.join()
-        print '\nepoch:', epoch, f_en_en_theta, f_en_de_theta
+    intermediate_writer = open(model_param_writer_name + '.tmp', 'w')
+    if mode == 'training':
+        for epoch in range(2):
+            lr = 0.05
+            print 'epoch:', epoch, 'theta:', f_en_en_theta, f_en_de_theta
+            random.shuffle(training_instances)
+            pool = Pool(processes=cpu_count)
+            for ti in training_instances:
+                pool.apply_async(batch_sgd, args=(
+                    ti,
+                    f_en_en_theta,
+                    f_en_de_theta,
+                    phi_en_en,
+                    phi_en_de, lr,
+                    en_domain,
+                    de2id,
+                    en2id), callback=batch_sgd_accumulate)
+            pool.close()
+            pool.join()
+            print '\nepoch:', epoch, f_en_en_theta, f_en_de_theta
+            lr *= 0.75
+        print '\ntheta final:', f_en_en_theta, f_en_de_theta
+        final_writer = codecs.open(model_param_writer_name + '.final', 'w')
+        save_params(final_writer, f_en_en_theta, f_en_de_theta, f_en_en_names, f_en_de_names)
+        final_writer = codecs.open(options.save_params_file, 'w', 'utf8')
+        save_params(final_writer, f_en_en_theta, f_en_de_theta, f_en_en_names, f_en_de_names)
+    else:
+        print 'predicting...'
+        print 'theta:', f_en_en_theta, f_en_de_theta
         prediction_probs = 0.0
+        prediction_str = ''
         pool = Pool(processes=cpu_count)
-        for ti in test_instances:
+        lr = 0.05
+        for ti in training_instances:
             pool.apply_async(batch_predictions, args=(
                 ti,
                 f_en_en_theta,
@@ -339,8 +371,6 @@ if __name__ == '__main__':
                 en2id), callback=batch_prediction_probs_accumulate)
         pool.close()
         pool.join()
-        lr *= 0.5
         print '\nprediction probs:', prediction_probs
-    print '\ntheta final:', f_en_en_theta, f_en_de_theta
-    w = codecs.open(model_param_writer_name + '.final', 'w')
-    save_params(w, f_en_en_theta, f_en_de_theta, f_en_en_names, f_en_de_names)
+        final_writer = codecs.open(save_predictions_file, 'w', 'utf8')
+        final_writer.write(prediction_str)
