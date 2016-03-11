@@ -268,15 +268,9 @@ if __name__ == '__main__':
 
     if options.training_instances == '' or options.en_domain == '' or options.de_domain == '' or options.phi_wiwj == '' or options.phi_ed == '' or options.phi_ped == '':
         error_msg()
-        print 'here 0'
         exit(1)
-    elif options.save_params_file == '' and options.load_params_file == '':
+    elif options.save_params_file == '' and options.load_params_file == '' and options.save_predictions_file == '':
         error_msg()
-        print 'here 1'
-        exit(1)
-    elif options.load_params_file == '' and options.save_predictions_file == '':
-        error_msg()
-        print 'here 2', options.load_params_file, options.save_predictions_file
         exit(1)
     else:
         pass
