@@ -131,8 +131,8 @@ def create_factor_graph(ti, learning_rate, theta_en_en, theta_en_de, phi_en_en, 
     fg.pot_en_de = pot_en_de
 
     # covert to sparse phi
-    fg.phi_en_de_csc = sparse.csc_matrix(fg.phi_en_de)
-    fg.phi_en_en_csc = sparse.csc_matrix(fg.phi_en_en)
+    # fg.phi_en_de_csc = sparse.csc_matrix(fg.phi_en_de)
+    # fg.phi_en_en_csc = sparse.csc_matrix(fg.phi_en_en)
 
     # create Ve x Vg factors
     for v, simplenode in var_node_pairs:
@@ -234,13 +234,15 @@ def batch_sgd(training_instance, theta_en_en, theta_en_de, phi_en_en, phi_en_de,
     # sys.stderr.write('.')
     # f_en_en_theta, f_en_de_theta = fg.update_theta()
     g_en_en, g_en_de = fg.return_gradient()
-    return [sent_id, g_en_en, g_en_de]
+    p = fg.get_posterior_probs()
+    return [sent_id, p, g_en_en, g_en_de]
 
 
 def batch_sgd_accumulate(result):
-    global f_en_en_theta, f_en_de_theta, n_up
-    f_en_en_theta += result[1]
-    f_en_de_theta += result[2]
+    global f_en_en_theta, f_en_de_theta, n_up, prediction_probs
+    prediction_probs += result[1]
+    f_en_en_theta += result[2]
+    f_en_de_theta += result[3]
     if n_up % 10 == 0:
         intermediate_writer.write(
             str(n_up) + ' ' + np.array_str(f_en_en_theta) + ' ' + np.array_str(f_en_de_theta) + '\n')
@@ -302,7 +304,7 @@ if __name__ == '__main__':
 
     print 'reading phi wiwj'
     phi_en_en1 = np.loadtxt(options.phi_wiwj)
-    phi_en_en1[phi_en_en1 < 1.0 / len(en_domain)] = 0.0  # make sparse...
+    # phi_en_en1[phi_en_en1 < 1.0 / len(en_domain)] = 0.0  # make sparse...
     print np.count_nonzero(phi_en_en1)
     phi_en_en1 = np.reshape(phi_en_en1, (len(en_domain) * len(en_domain), 1))
     ss = np.shape(phi_en_en1)
@@ -311,12 +313,12 @@ if __name__ == '__main__':
 
     print 'reading phi ed'
     phi_en_de1 = np.loadtxt(options.phi_ed)
-    phi_en_de1[phi_en_de1 < 0.5] = 0.0
+    # phi_en_de1[phi_en_de1 < 0.5] = 0.0
     phi_en_de1 = np.reshape(phi_en_de1, (len(en_domain) * len(de_domain), 1))
 
     print 'reading phi ped'
     phi_en_de2 = np.loadtxt(options.phi_ped)
-    phi_en_de2[phi_en_de2 < 0.5] = 0.0
+    # phi_en_de2[phi_en_de2 < 0.5] = 0.0
     phi_en_de2 = np.reshape(phi_en_de2, (len(en_domain) * len(de_domain), 1))
     phi_en_de3 = np.zeros_like(phi_en_de1)
     phi_en_de = np.concatenate((phi_en_de1, phi_en_de2, phi_en_de3), axis=1)
@@ -328,8 +330,9 @@ if __name__ == '__main__':
     model_param_writer_name = options.training_instances + '.cpu' + str(cpu_count) + '.' + t_now + '.params'
     intermediate_writer = open(model_param_writer_name + '.tmp', 'w')
     if mode == 'training':
-        for epoch in range(2):
+        for epoch in range(3):
             lr = 0.05
+            prediction_probs = 0.0
             print 'epoch:', epoch, 'theta:', f_en_en_theta, f_en_de_theta
             random.shuffle(training_instances)
             pool = Pool(processes=cpu_count)
@@ -346,6 +349,7 @@ if __name__ == '__main__':
             pool.close()
             pool.join()
             print '\nepoch:', epoch, f_en_en_theta, f_en_de_theta
+            print '\nprediction probs:', prediction_probs
             lr *= 0.75
         print '\ntheta final:', f_en_en_theta, f_en_de_theta
         final_writer = codecs.open(model_param_writer_name + '.final', 'w')
@@ -355,10 +359,11 @@ if __name__ == '__main__':
     else:
         print 'predicting...'
         print 'theta:', f_en_en_theta, f_en_de_theta
-        prediction_probs = 0.0
+
         prediction_str = ''
         pool = Pool(processes=cpu_count)
         lr = 0.05
+        prediction_probs = 0.0
         for ti in training_instances:
             pool.apply_async(batch_predictions, args=(
                 ti,
