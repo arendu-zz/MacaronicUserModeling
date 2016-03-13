@@ -72,7 +72,7 @@ def load_fg(fg, ti, en_domain, de2id, en2id):
         history_feature[i, :] += 1.0
         history_feature[:, j] += 1.0
         history_feature[i, j] += 1.0
-    history_feature = np.reshape(history_feature, (np.shape(fg.phi_en_de)[0],1))
+    history_feature = np.reshape(history_feature, (np.shape(fg.phi_en_de)[0],))
     fg.phi_en_de[:, -1] = history_feature
 
     # table = self.factor.get_phi().dot(self.factor.get_theta().T)  # todo: this line is very very slow!!!!
@@ -85,8 +85,8 @@ def load_fg(fg, ti, en_domain, de2id, en2id):
     fg.pot_en_de = pot_en_de
 
     # covert to csr
-    fg.phi_en_de_csc = sparse.csc_matrix(fg.phi_en_de)
-    fg.phi_en_en_csc = sparse.csc_matrix(fg.phi_en_en)
+    # fg.phi_en_de_csc = sparse.csc_matrix(fg.phi_en_de)
+    # fg.phi_en_en_csc = sparse.csc_matrix(fg.phi_en_en)
 
     # create Ve x Vg factors
     for v, simplenode in var_node_pairs:
@@ -95,6 +95,8 @@ def load_fg(fg, ti, en_domain, de2id, en2id):
             o_idx = de2id[simplenode.l2_word]
             p = PotentialTable(v_id2dim={v.id: 0}, table=None, observed_dim=o_idx)
             f.add_varset_with_potentials(varset=[v], ptable=p)
+            f.position = v.id
+            f.word_label = simplenode.l2_word
             factors.append(f)
         elif v.var_type == VAR_TYPE_GIVEN:
             pass
@@ -107,6 +109,8 @@ def load_fg(fg, ti, en_domain, de2id, en2id):
                 f = FactorNode(id=len(factors), factor_type='en_en')
                 p = PotentialTable(v_id2dim={v1.id: 0, v2.id: 1}, table=None, observed_dim=None)
                 f.add_varset_with_potentials(varset=[v1, v2], ptable=p)
+                f.position = None
+                f.word_label = None
                 factors.append(f)
             elif v1.var_type == VAR_TYPE_GIVEN and v2.var_type == VAR_TYPE_GIVEN:
                 pass
@@ -120,6 +124,8 @@ def load_fg(fg, ti, en_domain, de2id, en2id):
                 o_idx = en2id[v_given.supervised_label]  # either a users guess OR a revealed word -> see line 31,36
                 p = PotentialTable(v_id2dim={v_pred.id: 0}, table=None, observed_dim=o_idx)
                 f.add_varset_with_potentials(varset=[v_pred], ptable=p)
+                f.position = v_given.id
+                f.word_label = v_given.supervised_label
                 factors.append(f)
             pass
 
@@ -180,7 +186,6 @@ if __name__ == '__main__':
     phi_en_en = np.concatenate((phi_en_en1,), axis=1)
     phi_en_en.astype(DTYPE)
 
-
     f_en_de = ['x', 'y', 'history']
     # f_en_de_theta = np.random.rand(1, len(f_en_de)) - 0.5  # zero mean random values
     f_en_de_theta = np.zeros((1, len(f_en_de)))
@@ -200,8 +205,8 @@ if __name__ == '__main__':
     phi_en_de = np.concatenate((phi_en_de1, phi_en_de2, phi_en_de3), axis=1)
     phi_en_de.astype(DTYPE)
 
-
     fg = None
+    training_instances = training_instances[:10]
     split_ratio = int(len(training_instances) * 0.33)
     test_instances = training_instances[:split_ratio]
     all_training_instances = training_instances[split_ratio:]
@@ -210,7 +215,7 @@ if __name__ == '__main__':
         print 'epoch', epoch
         lp = 0.0
         if epoch == 0 or epoch == 2:
-            for t_idx, training_instance in enumerate(test_instances):
+            for t_idx, training_instance in enumerate(training_instances):
                 j_ti = json.loads(training_instance)
                 ti = TrainingInstance.from_dict(j_ti)
 
@@ -228,13 +233,14 @@ if __name__ == '__main__':
                 lp += fg.get_posterior_probs()
                 # print t_idx
                 fg.get_max_postior_label(top=15)
+                fgs = fg.to_string()
             print 'log sum of posteriors probs for subervised labels:', lp
         load_times = []
         grad_times = []
         grad_times_per_factor = []
         inference_times = []
         st_time = time.time()
-        # random.shuffle(all_training_instances)
+        random.shuffle(all_training_instances)
         for t_idx, training_instance in enumerate(all_training_instances):
             sys.stderr.write('.')
             j_ti = json.loads(training_instance)

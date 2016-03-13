@@ -7,6 +7,13 @@ from numpy import float32 as DTYPE
 np.set_printoptions(linewidth=300, precision=2)
 
 
+class PhiWrapper(object):
+    def __init__(self, phi_en_en, phi_en_en_w1, phi_en_de):
+        self.phi_en_en = phi_en_en
+        self.phi_en_en_w1 = phi_en_en_w1
+        self.phi_en_de = phi_en_de
+
+
 def pointwise_multiply(m1, m2):
     return np.multiply(m1, m2)
 
