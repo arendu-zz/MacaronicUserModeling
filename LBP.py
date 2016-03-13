@@ -349,13 +349,14 @@ class FactorNode():
         else:
             raise BaseException("only 2 feature value types are supported right now..")
 
-    def get_phi_csc(self):
+    '''def get_phi_csc(self):
         if self.factor_type == 'en_en':
             return self.graph.phi_en_en_csc
         elif self.factor_type == 'en_de':
             return self.graph.phi_en_de_csc
         else:
             raise BaseException("only 2 feature value types are supported right now..")
+    '''
 
     def get_shape(self):
         if len(self.varset) == 1:
@@ -449,7 +450,8 @@ class FactorNode():
         f_ij = np.reshape(g, (np.size(g), 1))
         gg = time.time()
         # print 'nz appx, orig, full :', np.count_nonzero(f_ij_approx), np.count_nonzero(f_ij), np.size(f_ij)
-        grad1 = (self.get_phi_csc().T.dot(f_ij)).T
+        grad1 = (self.get_phi().T.dot(f_ij)).T
+        # grad1 = (self.get_phi_csc().T.dot(f_ij)).T
         # grad_approx = array_utils.induce_s_mutliply(f_ij, self.get_phi().T, k=1000000000)
         # grad_approx = array_utils.induce_s_mutliply_clip(f_ij, self.get_phi().T, k=1000)
         # grad1 = grad_approx.T
