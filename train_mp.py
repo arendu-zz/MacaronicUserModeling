@@ -416,9 +416,9 @@ if __name__ == '__main__':
             print f_en_de_names, f_en_de_theta
             print '\nprediction probs:', prediction_probs
             lr *= 0.75
+            final_writer = codecs.open(options.save_params_file + '.iter' + str(epoch), 'w', 'utf8')
+            save_params(final_writer, f_en_en_theta, f_en_de_theta, f_en_en_names, f_en_de_names)
         print '\ntheta final:', f_en_en_theta, f_en_de_theta
-        final_writer = codecs.open(model_param_writer_name + '.final', 'w')
-        save_params(final_writer, f_en_en_theta, f_en_de_theta, f_en_en_names, f_en_de_names)
         final_writer = codecs.open(options.save_params_file, 'w', 'utf8')
         save_params(final_writer, f_en_en_theta, f_en_de_theta, f_en_en_names, f_en_de_names)
     else:
