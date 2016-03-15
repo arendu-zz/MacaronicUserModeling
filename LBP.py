@@ -15,14 +15,24 @@ BINARY_FACTOR = 'binary_factor'
 
 
 class FactorGraph():
-    def __init__(self, theta_en_en, theta_en_de, phi_en_en, phi_en_de, phi_en_en_w1):
+    def __init__(self,
+                 theta_en_en_names,
+                 theta_en_de_names,
+                 theta_en_en,
+                 theta_en_de,
+                 phi_en_en,
+                 phi_en_de,
+                 phi_en_en_w1):
         self.theta_en_en = theta_en_en
         self.theta_en_de = theta_en_de
+        self.theta_en_en_names = theta_en_en_names,
+        self.theta_en_de_names = theta_en_de_names,
         self.phi_en_en = phi_en_en
         self.phi_en_en_w1 = phi_en_en_w1
         self.phi_en_de = phi_en_de
         self.pot_en_en = None
         self.pot_en_en_w1 = None
+        self.pot_en_en_clamp = None
         self.pot_en_de = None
         self.variables = {}
         self.factors = []
@@ -35,6 +45,10 @@ class FactorGraph():
         self.gg_times = []
         self.sgg_times = []
         self.active_domains = {}
+        if isinstance(self.theta_en_en_names, tuple):
+            self.theta_en_en_names = self.theta_en_en_names[0]
+        if isinstance(self.theta_en_de_names, tuple):
+            self.theta_en_de_names = self.theta_en_de_names[0]
 
     def to_string(self):
         position_factors = sorted([(f.position, f) for f in self.factors if f.position is not None])
@@ -199,7 +213,15 @@ class FactorGraph():
         grad_en_en = np.zeros_like(self.theta_en_en)
         for f in self.factors:
             if f.factor_type == 'en_en':
-                grad_en_en += f.get_gradient()
+                gr = f.get_gradient()
+                if f.gap == 1:
+                    idx = self.theta_en_en_names.index('pmi_w1')
+                    grad_en_en[0, idx] += gr[0, 0]
+                elif f.gap is None or f.gap > 1:
+                    idx = self.theta_en_en_names.index('pmi')
+                    grad_en_en[0, idx] += gr[0, 0]
+                else:
+                    raise BaseException('unknown feature name')
             elif f.factor_type == 'en_de':
                 grad_en_de += f.get_gradient()
             else:
@@ -328,7 +350,7 @@ class FactorNode():
 
     def get_pot(self):
         if self.factor_type == 'en_en':
-            if self.gap > 1 or self.gap is None:
+            if self.gap > 1:
                 return self.graph.pot_en_en
             elif self.gap == 1:
                 return self.graph.pot_en_en_w1
