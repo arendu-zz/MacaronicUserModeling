@@ -7,12 +7,11 @@ import numpy as np
 import sys
 from optparse import OptionParser
 from LBP import FactorNode, FactorGraph, VariableNode, VAR_TYPE_PREDICTED, PotentialTable, VAR_TYPE_GIVEN
-import time
 from time import ctime
 import codecs
 from numpy import float32 as DTYPE
-from scipy import sparse
 from multiprocessing import Pool
+from array_utils import PhiWrapper
 
 global f_en_en_theta, f_en_de_theta, prediction_probs, intermediate_writer, prediction_str, final_writer, n_up
 n_up = 0
@@ -27,7 +26,8 @@ def error_msg():
                 --ti [training instance file]\n \
                 --end [en domain file]\n \
                 --ded [de domain file]\n \
-                --phi_wiwj [wiwj file]\n \
+                --phi_pmi [pmi file]\n \
+                --phi_pmi_w1 [pmi w1 file]\n \
                 --phi_ed [ed file]\n \
                 --phi_ped [ped file]\n \
                 --cpu [4 by default]\n \
@@ -97,7 +97,7 @@ def get_var_node_pair(sorted_current_sent, current_guesses, current_revealed, en
     return var_node_pairs
 
 
-def create_factor_graph(ti, learning_rate, theta_en_en, theta_en_de, phi_en_en, phi_en_de, en_domain, de2id, en2id):
+def create_factor_graph(ti, learning_rate, theta_en_en, theta_en_de, phi_wrapper, en_domain, de2id, en2id):
     ordered_current_sent = sorted([(simplenode.position, simplenode) for simplenode in ti.current_sent])
     ordered_current_sent = [simplenode for position, simplenode in ordered_current_sent]
     var_node_pairs = get_var_node_pair(ordered_current_sent, ti.current_guesses, ti.current_revealed_guesses, en_domain)
@@ -107,8 +107,9 @@ def create_factor_graph(ti, learning_rate, theta_en_en, theta_en_de, phi_en_en, 
     len_de_domain = len(de_domain)
     fg = FactorGraph(theta_en_en=theta_en_en,
                      theta_en_de=theta_en_de,
-                     phi_en_en=phi_en_en,
-                     phi_en_de=phi_en_de)
+                     phi_en_en=phi_wrapper.phi_en_en,
+                     phi_en_de=phi_wrapper.phi_en_de,
+                     phi_en_en_w1=phi_wrapper.phi_en_en_w1)
     fg.learning_rate = learning_rate
 
     history_feature = np.zeros((len_en_domain, len_de_domain))
@@ -126,13 +127,17 @@ def create_factor_graph(ti, learning_rate, theta_en_en, theta_en_de, phi_en_en, 
     pot_en_en = np.exp(pot_en_en)
     fg.pot_en_en = pot_en_en
 
+    pot_en_en_w1 = fg.phi_en_en_w1.dot(fg.theta_en_en.T)
+    pot_en_en_w1 = np.exp(pot_en_en_w1)
+    fg.pot_en_en_w1 = pot_en_en_w1
+
     pot_en_de = fg.phi_en_de.dot(fg.theta_en_de.T)
     pot_en_de = np.exp(pot_en_de)
     fg.pot_en_de = pot_en_de
 
     # covert to sparse phi
-    fg.phi_en_de_csc = sparse.csc_matrix(fg.phi_en_de)
-    fg.phi_en_en_csc = sparse.csc_matrix(fg.phi_en_en)
+    # fg.phi_en_de_csc = sparse.csc_matrix(fg.phi_en_de)
+    # fg.phi_en_en_csc = sparse.csc_matrix(fg.phi_en_en)
 
     # create Ve x Vg factors
     for v, simplenode in var_node_pairs:
@@ -142,6 +147,7 @@ def create_factor_graph(ti, learning_rate, theta_en_en, theta_en_de, phi_en_en, 
             p = PotentialTable(v_id2dim={v.id: 0}, table=None, observed_dim=o_idx)
             f.add_varset_with_potentials(varset=[v], ptable=p)
             f.position = v.id
+            f.gap = 0
             f.word_label = simplenode.l2_word
             factors.append(f)
         elif v.var_type == VAR_TYPE_GIVEN:
@@ -157,6 +163,7 @@ def create_factor_graph(ti, learning_rate, theta_en_en, theta_en_de, phi_en_en, 
                 f.add_varset_with_potentials(varset=[v1, v2], ptable=p)
                 f.position = None
                 f.word_label = None
+                f.gap = abs(v1.id - v2.id)
                 factors.append(f)
             elif v1.var_type == VAR_TYPE_GIVEN and v2.var_type == VAR_TYPE_GIVEN:
                 pass
@@ -171,6 +178,7 @@ def create_factor_graph(ti, learning_rate, theta_en_en, theta_en_de, phi_en_en, 
                 p = PotentialTable(v_id2dim={v_pred.id: 0}, table=None, observed_dim=o_idx)
                 f.add_varset_with_potentials(varset=[v_pred], ptable=p)
                 f.position = v_given.id
+                f.gap = abs(v_given.id - v_pred.id)
                 f.word_label = v_given.supervised_label
                 factors.append(f)
             pass
@@ -183,7 +191,7 @@ def create_factor_graph(ti, learning_rate, theta_en_en, theta_en_de, phi_en_en, 
     return fg
 
 
-def batch_predictions(training_instance, theta_en_en, theta_en_de, phi_en_en, phi_en_de, lr, en_domain, de2id, en2id):
+def batch_predictions(training_instance, theta_en_en, theta_en_de, phi_wapper, lr, en_domain, de2id, en2id):
     j_ti = json.loads(training_instance)
     ti = TrainingInstance.from_dict(j_ti)
     sent_id = ti.current_sent[0].sent_id
@@ -191,8 +199,7 @@ def batch_predictions(training_instance, theta_en_en, theta_en_de, phi_en_en, ph
                              learning_rate=lr,
                              theta_en_de=theta_en_de,
                              theta_en_en=theta_en_en,
-                             phi_en_en=phi_en_en,
-                             phi_en_de=phi_en_de,
+                             phi_wrapper=phi_wapper,
                              en_domain=en_domain,
                              de2id=de2id,
                              en2id=en2id)
@@ -214,7 +221,7 @@ def batch_prediction_probs_accumulate(result):
         prediction_str = fgs + '\n'
 
 
-def batch_sgd(training_instance, theta_en_en, theta_en_de, phi_en_en, phi_en_de, lr, en_domain, de2id, en2id):
+def batch_sgd(training_instance, theta_en_en, theta_en_de, phi_wrapper, lr, en_domain, de2id, en2id):
     j_ti = json.loads(training_instance)
     ti = TrainingInstance.from_dict(j_ti)
     sent_id = ti.current_sent[0].sent_id
@@ -222,8 +229,7 @@ def batch_sgd(training_instance, theta_en_en, theta_en_de, phi_en_en, phi_en_de,
                              learning_rate=lr,
                              theta_en_de=theta_en_de,
                              theta_en_en=theta_en_en,
-                             phi_en_en=phi_en_en,
-                             phi_en_de=phi_en_de,
+                             phi_wrapper=phi_wrapper,
                              en_domain=en_domain,
                              de2id=de2id,
                              en2id=en2id)
@@ -234,13 +240,15 @@ def batch_sgd(training_instance, theta_en_en, theta_en_de, phi_en_en, phi_en_de,
     # sys.stderr.write('.')
     # f_en_en_theta, f_en_de_theta = fg.update_theta()
     g_en_en, g_en_de = fg.return_gradient()
-    return [sent_id, g_en_en, g_en_de]
+    p = fg.get_posterior_probs()
+    return [sent_id, p, g_en_en, g_en_de]
 
 
 def batch_sgd_accumulate(result):
-    global f_en_en_theta, f_en_de_theta, n_up
-    f_en_en_theta += result[1]
-    f_en_de_theta += result[2]
+    global f_en_en_theta, f_en_de_theta, n_up, prediction_probs
+    prediction_probs += result[1]
+    f_en_en_theta += result[2]
+    f_en_de_theta += result[3]
     if n_up % 10 == 0:
         intermediate_writer.write(
             str(n_up) + ' ' + np.array_str(f_en_en_theta) + ' ' + np.array_str(f_en_de_theta) + '\n')
@@ -257,7 +265,8 @@ if __name__ == '__main__':
     opt.add_option('--ti', dest='training_instances', default='')
     opt.add_option('--end', dest='en_domain', default='')
     opt.add_option('--ded', dest='de_domain', default='')
-    opt.add_option('--phi_wiwj', dest='phi_wiwj', default='')
+    opt.add_option('--phi_pmi', dest='phi_pmi', default='')
+    opt.add_option('--phi_pmi_w1', dest='phi_pmi_w1', default='')
     opt.add_option('--phi_ed', dest='phi_ed', default='')
     opt.add_option('--phi_ped', dest='phi_ped', default='')
     opt.add_option('--cpu', dest='cpus', default='')
@@ -266,7 +275,7 @@ if __name__ == '__main__':
     opt.add_option('--save_predictions', dest='save_predictions_file', default='')
     (options, _) = opt.parse_args()
 
-    if options.training_instances == '' or options.en_domain == '' or options.de_domain == '' or options.phi_wiwj == '' or options.phi_ed == '' or options.phi_ped == '':
+    if options.training_instances == '' or options.en_domain == '' or options.de_domain == '' or options.phi_pmi_w1 == '' or options.phi_pmi == '' or options.phi_ed == '' or options.phi_ped == '':
         error_msg()
         exit(1)
     elif options.save_params_file == '' and options.load_params_file == '' and options.save_predictions_file == '':
@@ -279,7 +288,7 @@ if __name__ == '__main__':
     print 'cpu count:', cpu_count
     mode = 'training' if options.load_params_file == '' else 'predicting'
     if mode == 'training':
-        f_en_en_names = ['skipgram']
+        f_en_en_names = ['pmi']
         f_en_en_theta = np.zeros((1, len(f_en_en_names)))
         f_en_de_names = ['ed', 'ped', 'history']
         f_en_de_theta = np.zeros((1, len(f_en_de_names)))
@@ -300,36 +309,36 @@ if __name__ == '__main__':
     de2id = dict((d, idx) for idx, d in enumerate(de_domain))
     print len(en_domain), len(de_domain)
 
-    print 'reading phi wiwj'
-    phi_en_en1 = np.loadtxt(options.phi_wiwj)
-    phi_en_en1[phi_en_en1 < 1.0 / len(en_domain)] = 0.0  # make sparse...
-    print np.count_nonzero(phi_en_en1)
+    print 'reading phi pmi'
+    phi_en_en1 = np.loadtxt(options.phi_pmi)
     phi_en_en1 = np.reshape(phi_en_en1, (len(en_domain) * len(en_domain), 1))
-    ss = np.shape(phi_en_en1)
     phi_en_en = np.concatenate((phi_en_en1,), axis=1)
     phi_en_en.astype(DTYPE)
+    print 'reading phi pmi w1'
+    phi_en_en_w1 = np.loadtxt(options.phi_pmi_w1)
+    phi_en_en_w1 = np.reshape(phi_en_en1, (len(en_domain) * len(en_domain), 1))
+    phi_en_en_w1.astype(DTYPE)
 
     print 'reading phi ed'
     phi_en_de1 = np.loadtxt(options.phi_ed)
-    phi_en_de1[phi_en_de1 < 0.5] = 0.0
     phi_en_de1 = np.reshape(phi_en_de1, (len(en_domain) * len(de_domain), 1))
 
     print 'reading phi ped'
     phi_en_de2 = np.loadtxt(options.phi_ped)
-    phi_en_de2[phi_en_de2 < 0.5] = 0.0
     phi_en_de2 = np.reshape(phi_en_de2, (len(en_domain) * len(de_domain), 1))
     phi_en_de3 = np.zeros_like(phi_en_de1)
     phi_en_de = np.concatenate((phi_en_de1, phi_en_de2, phi_en_de3), axis=1)
     phi_en_de.astype(DTYPE)
 
-    split_ratio = int(len(training_instances) * 0.1)
+    phi_wrapper = PhiWrapper(phi_en_en, phi_en_en_w1, phi_en_de)
 
     t_now = '-'.join(ctime().split())
     model_param_writer_name = options.training_instances + '.cpu' + str(cpu_count) + '.' + t_now + '.params'
     intermediate_writer = open(model_param_writer_name + '.tmp', 'w')
     if mode == 'training':
-        for epoch in range(2):
+        for epoch in range(3):
             lr = 0.05
+            prediction_probs = 0.0
             print 'epoch:', epoch, 'theta:', f_en_en_theta, f_en_de_theta
             random.shuffle(training_instances)
             pool = Pool(processes=cpu_count)
@@ -338,14 +347,15 @@ if __name__ == '__main__':
                     ti,
                     f_en_en_theta,
                     f_en_de_theta,
-                    phi_en_en,
-                    phi_en_de, lr,
+                    phi_wrapper,
+                    lr,
                     en_domain,
                     de2id,
                     en2id), callback=batch_sgd_accumulate)
             pool.close()
             pool.join()
             print '\nepoch:', epoch, f_en_en_theta, f_en_de_theta
+            print '\nprediction probs:', prediction_probs
             lr *= 0.75
         print '\ntheta final:', f_en_en_theta, f_en_de_theta
         final_writer = codecs.open(model_param_writer_name + '.final', 'w')
@@ -355,17 +365,17 @@ if __name__ == '__main__':
     else:
         print 'predicting...'
         print 'theta:', f_en_en_theta, f_en_de_theta
-        prediction_probs = 0.0
         prediction_str = ''
         pool = Pool(processes=cpu_count)
         lr = 0.05
+        prediction_probs = 0.0
         for ti in training_instances:
             pool.apply_async(batch_predictions, args=(
                 ti,
                 f_en_en_theta,
                 f_en_de_theta,
-                phi_en_en,
-                phi_en_de, lr,
+                phi_wrapper,
+                lr,
                 en_domain,
                 de2id,
                 en2id), callback=batch_prediction_probs_accumulate)

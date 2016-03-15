@@ -15,12 +15,14 @@ BINARY_FACTOR = 'binary_factor'
 
 
 class FactorGraph():
-    def __init__(self, theta_en_en, theta_en_de, phi_en_en, phi_en_de):
+    def __init__(self, theta_en_en, theta_en_de, phi_en_en, phi_en_de, phi_en_en_w1):
         self.theta_en_en = theta_en_en
         self.theta_en_de = theta_en_de
         self.phi_en_en = phi_en_en
+        self.phi_en_en_w1 = phi_en_en_w1
         self.phi_en_de = phi_en_de
         self.pot_en_en = None
+        self.pot_en_en_w1 = None
         self.pot_en_de = None
         self.variables = {}
         self.factors = []
@@ -296,6 +298,7 @@ class FactorNode():
         self.observed_domain_size = observed_domain_size
         self.position = None
         self.word_label = None
+        self.gap = None
 
     def __str__(self):
         return 'F_' + str(self.id)
@@ -325,7 +328,12 @@ class FactorNode():
 
     def get_pot(self):
         if self.factor_type == 'en_en':
-            return self.graph.pot_en_en
+            if self.gap > 1:
+                return self.graph.pot_en_en
+            elif self.gap == 1:
+                return self.graph.phi_en_en_w1
+            else:
+                raise BaseException("only 2 kinds of distances are supported ...")
         elif self.factor_type == 'en_de':
             return self.graph.pot_en_de
         else:
@@ -343,19 +351,25 @@ class FactorNode():
 
     def get_phi(self):
         if self.factor_type == 'en_en':
-            return self.graph.phi_en_en
+            if self.gap > 1:
+                return self.graph.phi_en_en
+            elif self.gap == 1:
+                return self.graph.phi_en_en_w1
+            else:
+                raise BaseException("only 2 distances supported at the moment")
         elif self.factor_type == 'en_de':
             return self.graph.phi_en_de
         else:
             raise BaseException("only 2 feature value types are supported right now..")
 
-    def get_phi_csc(self):
+    '''def get_phi_csc(self):
         if self.factor_type == 'en_en':
             return self.graph.phi_en_en_csc
         elif self.factor_type == 'en_de':
             return self.graph.phi_en_de_csc
         else:
             raise BaseException("only 2 feature value types are supported right now..")
+    '''
 
     def get_shape(self):
         if len(self.varset) == 1:
@@ -449,7 +463,8 @@ class FactorNode():
         f_ij = np.reshape(g, (np.size(g), 1))
         gg = time.time()
         # print 'nz appx, orig, full :', np.count_nonzero(f_ij_approx), np.count_nonzero(f_ij), np.size(f_ij)
-        grad1 = (self.get_phi_csc().T.dot(f_ij)).T
+        grad1 = (self.get_phi().T.dot(f_ij)).T
+        # grad1 = (self.get_phi_csc().T.dot(f_ij)).T
         # grad_approx = array_utils.induce_s_mutliply(f_ij, self.get_phi().T, k=1000000000)
         # grad_approx = array_utils.induce_s_mutliply_clip(f_ij, self.get_phi().T, k=1000)
         # grad1 = grad_approx.T

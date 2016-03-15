@@ -29,8 +29,11 @@ if __name__ == '__main__':
     model_most_wrong_on = []
     for line in codecs.open(options.prediction_file, 'r', 'utf8').readlines():
         items = line.split()
-        words = [i for idx, i in enumerate(items) if idx % 2 == 0]
-        probs = [i for idx, i in enumerate(items) if idx % 2 != 0]
+        if len(items) < 15:
+            continue
+        de_word = items[:1][0]
+        words = [i for idx, i in enumerate(items[1:]) if idx % 2 == 0]
+        probs = [i for idx, i in enumerate(items[1:]) if idx % 2 != 0]
         label = words[0]
         label_prob = probs[0]
         guesses = words[1:]

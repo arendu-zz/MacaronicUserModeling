@@ -16,7 +16,7 @@ from multiprocessing import Pool
 import itertools
 import array_utils
 
-global f_en_en_theta, f_en_de_theta, prediction_probs, writer, n_up, domain2theta
+global f_en_en_theta, f_en_de_theta, prediction_probs, intermediate_writer, n_up, domain2theta
 n_up = 0
 np.seterr(divide='raise', over='raise', under='ignore')
 
@@ -147,8 +147,8 @@ def create_factor_graph(ti,
     fg.pot_en_de = pot_en_de
 
     # covert to sparse phi
-    fg.phi_en_de_csc = sparse.csc_matrix(fg.phi_en_de)
-    fg.phi_en_en_csc = sparse.csc_matrix(fg.phi_en_en)
+    # fg.phi_en_de_csc = sparse.csc_matrix(fg.phi_en_de)
+    # fg.phi_en_en_csc = sparse.csc_matrix(fg.phi_en_en)
 
     # create Ve x Vg factors
     for v, simplenode in var_node_pairs:
@@ -229,8 +229,8 @@ def batch_prediction_probs_accumulate(p):
     global prediction_probs, n_up
     prediction_probs += p
     if n_up % 10 == 0:
-        writer.write(str(n_up) + ' pred prob:' + str(prediction_probs) + '\n')
-        writer.flush()
+        intermediate_writer.write(str(n_up) + ' pred prob:' + str(prediction_probs) + '\n')
+        intermediate_writer.flush()
     n_up += 1
 
 
@@ -290,13 +290,14 @@ def batch_sgd_accumulate(result):
         ag = sample_ag[f_type, u]
         domain2theta[f_type, u] += ag
     if n_up % 100 == 0:
-        writer.write(str(n_up) + ' ' + np.array_str(f_en_en_theta) + ' ' + np.array_str(f_en_de_theta) + '\n')
-        writer.flush()
+        intermediate_writer.write(
+            str(n_up) + ' ' + np.array_str(f_en_en_theta) + ' ' + np.array_str(f_en_de_theta) + '\n')
+        intermediate_writer.flush()
     n_up += 1
 
 
 if __name__ == '__main__':
-    global f_en_en_theta, f_en_de_theta, prediction_probs, writer, n_up, domain2theta
+    global f_en_en_theta, f_en_de_theta, prediction_probs, intermediate_writer, n_up, domain2theta
 
     opt = OptionParser()
     # insert options here
@@ -378,7 +379,7 @@ if __name__ == '__main__':
 
     t_now = '-'.join(ctime().split())
     model_param_writer_name = options.training_instances + '.cpu' + str(cpu_count) + '.' + t_now + '.adapt.params'
-    writer = open(model_param_writer_name, 'w')
+    intermediate_writer = open(model_param_writer_name, 'w')
     w = codecs.open(model_param_writer_name + '.init', 'w')
     save_params(w, f_en_en_theta, f_en_de_theta, basic_f_en_en, basic_f_en_de, domain2theta)
 
