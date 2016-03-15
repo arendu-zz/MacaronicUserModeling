@@ -16,11 +16,19 @@ from array_utils import PhiWrapper
 global f_en_en_theta, f_en_de_theta, prediction_probs, intermediate_writer, prediction_str, final_writer, n_up
 global lock
 global options
+global domain2theta
 n_up = 0
 lock = Lock()
 np.seterr(divide='raise', over='raise', under='ignore')
 
 np.set_printoptions(precision=4, suppress=True)
+
+
+def apply_regularization(reg, grad, lr, theta):
+    rg = reg * theta
+    grad -= rg
+    grad *= lr
+    return grad
 
 
 def error_msg():
@@ -47,29 +55,57 @@ def find_guess(simplenode_id, guess_list):
 
 
 def read_params(params_file):
+    d2t = {}
     p1, p2 = codecs.open(params_file, 'r', 'utf8').read().split('ED_F:')
+    p1 = p1.strip()
+    p2 = p2.strip()
     _, p1 = p1.split('EE_F:')
     p1_lines = p1.split('\n')
-    een = p1_lines[0].split()
-    eet = np.array([float(i) for i in p1_lines[1].split()[1:]])
+    een = p1_lines[0].split()  # first line has names
+    eet = np.array([float(i) for i in p1_lines[1].split()[1:]])  # second line has original weights
     eet = np.reshape(eet, (1, np.size(eet)))
+    for p1_line in p1_lines[2:]:  # third line onwards has adapted weights
+        items = p1_line.split()
+        d = items[0]
+        d_eet = np.array([float(i) for i in items[1:]])
+        d_eet = np.reshape(d_eet, (1, np.size(d_eet)))
+        d2t['en_en', d.strip()] = d_eet
+
     p2_lines = p2.split('\n')
-    edn = p2_lines[0].split()
-    edt = np.array([float(i) for i in p2_lines[1].split()[1:]])
+    edn = p2_lines[0].split()  # first line has names
+    edt = np.array([float(i) for i in p2_lines[1].split()[1:]])  # second line has original weights
     edt = np.reshape(edt, (1, np.size(edt)))
-    print 'loaded params...'
-    return een, eet, edn, edt
+    for p2_line in p2_lines[2:]:
+        items = p2_line.split()
+        d = items[0]
+        d_edt = np.array([float(i) for i in items[1:]])
+        d_edt = np.reshape(d_edt, (1, np.size(d_edt)))
+        d2t['en_de', d] = d_edt
+    print 'loaded params...', len(d2t), 'adapted params..'
+    return een, eet, edn, edt, d2t
 
 
-def save_params(w, ee_theta, ed_theta, ee_names, ed_names):
+def save_params(w, ee_theta, ed_theta, ee_names, ed_names, d2t):
     w.write('\t'.join(['EE_F:'] + ee_names) + '\n')
     fl = [item for sublist in ee_theta.tolist() for item in sublist]
     n_o = ['Original'.ljust(15)] + ['%0.6f' % i for i in fl]
     w.write('\t'.join(n_o) + '\n')
+    for ft, d in d2t:
+        if ft == 'en_en':
+            dt = d2t[ft, d]
+            fl = [item for sublist in dt.tolist() for item in sublist]
+            n_o = [d.ljust(15)] + ['%0.6f' % i for i in fl]
+            w.write('\t'.join(n_o) + '\n')
     w.write('\t'.join(['ED_F:'] + ed_names) + '\n')
     fl = [item for sublist in ed_theta.tolist() for item in sublist]
     n_o = ['Original'.ljust(15)] + ['%0.6f' % i for i in fl]
     w.write('\t'.join(n_o) + '\n')
+    for ft, d in d2t:
+        if ft == 'en_de':
+            dt = d2t[ft, d]
+            fl = [item for sublist in dt.tolist() for item in sublist]
+            n_o = [d.ljust(15)] + ['%0.6f' % i for i in fl]
+            w.write('\t'.join(n_o) + '\n')
     w.flush()
     w.close()
 
@@ -107,7 +143,7 @@ def create_factor_graph(ti, learning_rate,
                         theta_en_en, theta_en_de,
                         phi_wrapper,
                         en_domain,
-                        de2id, en2id):
+                        de2id, en2id, d2t):
     ordered_current_sent = sorted([(simplenode.position, simplenode) for simplenode in ti.current_sent])
     ordered_current_sent = [simplenode for position, simplenode in ordered_current_sent]
     var_node_pairs = get_var_node_pair(ordered_current_sent, ti.current_guesses, ti.current_revealed_guesses, en_domain)
@@ -124,6 +160,22 @@ def create_factor_graph(ti, learning_rate,
                      phi_en_en_w1=phi_wrapper.phi_en_en_w1)
 
     fg.learning_rate = learning_rate
+
+    if options.user_adapt:
+        d = ti.user_id
+        fg.active_domains['en_en', d] = 1
+        fg.active_domains['en_de', d] = 1
+        sys.stderr.write('+')
+    elif options.experience_adapt:
+        d = len(ti.past_sentences_seen)
+        fg.active_domains['en_en', d] = 1
+        fg.active_domains['en_de', d] = 1
+        sys.stderr.write('=')
+    elif not options.user_adapt and not options.experience_adapt:
+        pass
+    else:
+        raise BaseException("2 domains not supported simultaniously")
+
     if options.history:
         history_feature = np.zeros((len_en_domain, len_de_domain))
         history_feature.astype(DTYPE)
@@ -147,22 +199,31 @@ def create_factor_graph(ti, learning_rate,
                 # for that i need to precompute closeness in my vocabulary
         incorrect_history = np.reshape(incorrect_history, (np.shape(fg.phi_en_de)[0],))
         fg.phi_en_de[:, -1] = incorrect_history
-    theta_pmi = fg.theta_en_en[0, theta_en_en_names.index('pmi')]
 
+    theta_pmi = fg.theta_en_en[0, theta_en_en_names.index('pmi')]
     pot_en_en = fg.phi_en_en * theta_pmi  # fg.phi_en_en.dot(fg.theta_en_en.T)
-    pot_en_en = np.exp(pot_en_en)
-    fg.pot_en_en = pot_en_en
 
     theta_pmi_w1 = fg.theta_en_en[0, theta_en_en_names.index('pmi_w1')]
     pot_en_en_w1 = fg.phi_en_en_w1 * theta_pmi_w1  # fg.phi_en_en_w1.dot(fg.theta_en_en.T)
-    pot_en_en_w1 = np.exp(pot_en_en_w1)
-    fg.pot_en_en_w1 = pot_en_en_w1
+
+    for ft, d in fg.active_domains:
+        if ft == 'en_en':
+            t = d2t[ft, d]
+            d_pmi = t[0, theta_en_en_names.index('pmi')]
+            pot_en_en += fg.phi_en_en * d_pmi
+            d_pmi_w1 = t[0, theta_en_en_names.index('pmi_w1')]
+            pot_en_en_w1 += fg.phi_en_en_w1 * d_pmi_w1
+
     pot_en_de = fg.phi_en_de.dot(fg.theta_en_de.T)
-    pot_en_de = np.exp(pot_en_de)
-    fg.pot_en_de = pot_en_de
-    # covert to sparse phi
-    # fg.phi_en_de_csc = sparse.csc_matrix(fg.phi_en_de)
-    # fg.phi_en_en_csc = sparse.csc_matrix(fg.phi_en_en)
+
+    for ft, d in fg.active_domains:
+        if ft == 'en_de':
+            t = d2t[ft, d]
+            pot_en_de += fg.phi_en_de.dot(t.T)
+
+    fg.pot_en_de = np.exp(pot_en_de)
+    fg.pot_en_en_w1 = np.exp(pot_en_en_w1)
+    fg.pot_en_en = np.exp(pot_en_en)
 
     # create Ve x Vg factors
     for v, simplenode in var_node_pairs:
@@ -220,7 +281,7 @@ def batch_predictions(training_instance,
                       theta_en_en_names, theta_en_de_names,
                       theta_en_en, theta_en_de,
                       phi_wapper, lr,
-                      en_domain, de2id, en2id):
+                      en_domain, de2id, en2id, d2t):
     j_ti = json.loads(training_instance)
     ti = TrainingInstance.from_dict(j_ti)
     sent_id = ti.current_sent[0].sent_id
@@ -234,7 +295,7 @@ def batch_predictions(training_instance,
                              phi_wrapper=phi_wapper,
                              en_domain=en_domain,
                              de2id=de2id,
-                             en2id=en2id)
+                             en2id=en2id, d2t=d2t)
 
     fg.initialize()
     fg.treelike_inference(3)
@@ -259,7 +320,7 @@ def batch_sgd(training_instance,
               theta_en_en_names, theta_en_de_names,
               theta_en_en, theta_en_de,
               phi_wrapper, lr,
-              en_domain, de2id, en2id):
+              en_domain, de2id, en2id, d2t):
     j_ti = json.loads(training_instance)
     ti = TrainingInstance.from_dict(j_ti)
     sent_id = ti.current_sent[0].sent_id
@@ -273,7 +334,8 @@ def batch_sgd(training_instance,
                              phi_wrapper=phi_wrapper,
                              en_domain=en_domain,
                              de2id=de2id,
-                             en2id=en2id)
+                             en2id=en2id,
+                             d2t=d2t)
 
     fg.initialize()
 
@@ -281,33 +343,52 @@ def batch_sgd(training_instance,
     # sys.stderr.write('.')
     # f_en_en_theta, f_en_de_theta = fg.update_theta()
     # sys.stderr.write('|')
-
-    g_en_en, g_en_de = fg.return_gradient()
+    if options.user_adapt or options.experience_adapt:
+        g_en_en, g_en_de = fg.get_unregularized_gradeint()
+        sample_ag = {}
+        for f_type, d in fg.active_domains:
+            g = g_en_en.copy() if f_type == 'en_en' else g_en_de.copy()
+            t = domain2theta[f_type, d]
+            r = fg.regularization_param
+            l = fg.learning_rate
+            sample_ag[f_type, d] = apply_regularization(r * 0.001, g, l, t)  # use a smaller regularization term
+        g_en_en = apply_regularization(r, g_en_en, l, fg.theta_en_en)
+        g_en_de = apply_regularization(r, g_en_de, l, fg.theta_en_de)
+    else:
+        sample_ag = None
+        g_en_en, g_en_de = fg.return_gradient()
     # sys.stderr.write('+')
 
     p = fg.get_posterior_probs()
 
-    return [sent_id, p, g_en_en, g_en_de]
+    return [sent_id, p, g_en_en, g_en_de, sample_ag]
 
 
 def batch_sgd_accumulate(result):
-    global f_en_en_theta, f_en_de_theta, n_up, prediction_probs
-    lock.acquire()
-    prediction_probs += result[1]
-    f_en_en_theta += result[2]
-    f_en_de_theta += result[3]
-    sys.stderr.write('*')
-    lock.release()
-    if n_up % 10 == 0:
-        intermediate_writer.write(
-            str(n_up) + ' ' + np.array_str(f_en_en_theta) + ' ' + np.array_str(f_en_de_theta) + '\n')
-        intermediate_writer.flush()
-    n_up += 1
-    # print 'received', result[0], f_en_en_theta, f_en_de_theta
+    global f_en_en_theta, f_en_de_theta, n_up, prediction_probs, domain2theta
+    if options.user_adapt or options.experience_adapt:
+        lock.acquire()
+        prediction_probs += result[1]
+        f_en_en_theta += result[2]
+        f_en_de_theta += result[3]
+        sample_ag = result[4]
+        for f_type, d in sample_ag:
+            ag = sample_ag[f_type, d]
+            domain2theta[f_type, d] += ag
+        sys.stderr.write('*')
+        lock.release()
+    else:
+        lock.acquire()
+        prediction_probs += result[1]
+        f_en_en_theta += result[2]
+        f_en_de_theta += result[3]
+        sys.stderr.write('*')
+        lock.release()
+        # print 'received', result[0], f_en_en_theta, f_en_de_theta
 
 
 if __name__ == '__main__':
-    global f_en_en_theta, f_en_de_theta, prediction_probs, prediction_str, intermediate_writer, n_up
+    # global f_en_en_theta, f_en_de_theta, prediction_probs, prediction_str, intermediate_writer, n_up
 
     opt = OptionParser()
     # insert options here
@@ -324,6 +405,9 @@ if __name__ == '__main__':
     opt.add_option('--save_predictions', dest='save_predictions_file', default='')
     opt.add_option('--history', dest='history', default=False, action='store_true')
     opt.add_option('--session_history', dest='session_history', default=False, action='store_true')
+    opt.add_option('--user_adapt', dest='user_adapt', default=False, action='store_true')
+    opt.add_option('--experience_adapt', dest='experience_adapt', default=False, action='store_true')
+
     (options, _) = opt.parse_args()
 
     if options.training_instances == '' or options.en_domain == '' or options.de_domain == '' or options.phi_pmi_w1 == '' or options.phi_pmi == '' or options.phi_ed == '' or options.phi_ped == '':
@@ -335,21 +419,49 @@ if __name__ == '__main__':
     else:
         pass
 
+    print options.user_adapt, ' is the user adapt'
+    print options.experience_adapt, 'is the experienence adapt'
+
     cpu_count = 4 if options.cpus.strip() == '' else int(options.cpus)
     print 'cpu count:', cpu_count
+
+    domains = []
+    if options.user_adapt and options.experience_adapt:
+        sys.stderr.write("Currently only supports 1 type of adaptation.")
+        exit(1)
+
+    if options.user_adapt:
+        try:
+            domains = [d.strip() for d in codecs.open(options.training_instances + '.users').readlines()]
+        except IOError:
+            sys.stderr.write("user_adapt option can not find .users file.")
+            exit(1)
+    if options.experience_adapt:
+        try:
+            domains = [d.strip() for d in codecs.open(options.training_instances + '.experience').readlines()]
+        except IOError:
+            sys.stderr.write("experience_adapt option can not find .experience file.")
+            exit(1)
+
     mode = 'training' if options.load_params_file == '' else 'predicting'
     if mode == 'training':
         f_en_en_names = ['pmi', 'pmi_w1']
         f_en_en_theta = np.zeros((1, len(f_en_en_names)))
         f_en_de_names = ['ed', 'ped', 'full_history', 'hit_history']
         f_en_de_theta = np.zeros((1, len(f_en_de_names)))
+        domain2theta = {}
+        for d in domains:
+            domain2theta['en_en', d] = f_en_en_theta.copy()
+            domain2theta['en_de', d] = f_en_de_theta.copy()
     else:
-        een, eet, edn, edt = read_params(options.load_params_file)
+        ext = '.user_apapt' if options.user_adapt else ('.exp_adapt' if options.experience_adapt else '')
+        een, eet, edn, edt, d2t = read_params(options.load_params_file + ext)
         save_predictions_file = options.save_predictions_file
         f_en_en_names = een
         f_en_en_theta = eet
         f_en_de_names = edn
         f_en_de_theta = edt
+        domain2theta = d2t
 
     print 'reading in  ti and domains...'
     training_instances = codecs.open(options.training_instances).readlines()
@@ -383,7 +495,6 @@ if __name__ == '__main__':
     phi_en_de.astype(DTYPE)
 
     phi_wrapper = PhiWrapper(phi_en_en, phi_en_en_w1, phi_en_de)
-    lock = Lock()
     t_now = '-'.join(ctime().split())
     model_param_writer_name = options.training_instances + '.cpu' + str(cpu_count) + '.' + t_now + '.params'
     intermediate_writer = open(model_param_writer_name + '.tmp', 'w')
@@ -407,7 +518,8 @@ if __name__ == '__main__':
                     lr,
                     en_domain,
                     de2id,
-                    en2id), callback=batch_sgd_accumulate)
+                    en2id,
+                    domain2theta), callback=batch_sgd_accumulate)
             pool.close()
             pool.join()
             print '\nepoch:', epoch
@@ -415,11 +527,13 @@ if __name__ == '__main__':
             print f_en_de_names, f_en_de_theta
             print '\nprediction probs:', prediction_probs
             lr *= 0.75
-            final_writer = codecs.open(options.save_params_file + '.iter' + str(epoch), 'w', 'utf8')
-            save_params(final_writer, f_en_en_theta, f_en_de_theta, f_en_en_names, f_en_de_names)
+            ext = '.user_apapt' if options.user_adapt else ('.exp_adapt' if options.experience_adapt else '')
+            final_writer = codecs.open(options.save_params_file + ext + '.iter' + str(epoch), 'w', 'utf8')
+            save_params(final_writer, f_en_en_theta, f_en_de_theta, f_en_en_names, f_en_de_names, domain2theta)
         print '\ntheta final:', f_en_en_theta, f_en_de_theta
-        final_writer = codecs.open(options.save_params_file, 'w', 'utf8')
-        save_params(final_writer, f_en_en_theta, f_en_de_theta, f_en_en_names, f_en_de_names)
+        ext = '.user_apapt' if options.user_adapt else ('.exp_adapt' if options.experience_adapt else '')
+        final_writer = codecs.open(options.save_params_file + ext, 'w', 'utf8')
+        save_params(final_writer, f_en_en_theta, f_en_de_theta, f_en_en_names, f_en_de_names, domain2theta)
     else:
         print 'predicting...'
         print f_en_en_names, f_en_en_theta
@@ -438,9 +552,11 @@ if __name__ == '__main__':
                                        lr,
                                        en_domain,
                                        de2id,
-                                       en2id)
+                                       en2id,
+                                       domain2theta)
             prediction_probs += p
             prediction_str = prediction_str + fgs + '\n'
         print '\nprediction probs:', prediction_probs, n_up
-        final_writer = codecs.open(save_predictions_file, 'w', 'utf8')
+        ext = '.user_apapt' if options.user_adapt else ('.exp_adapt' if options.experience_adapt else '')
+        final_writer = codecs.open(save_predictions_file + ext, 'w', 'utf8')
         final_writer.write(prediction_str)
