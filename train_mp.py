@@ -425,24 +425,22 @@ if __name__ == '__main__':
         print f_en_en_names, f_en_en_theta
         print f_en_de_names, f_en_de_theta
         prediction_str = ''
-        pool = Pool(processes=cpu_count)
         lr = 0.05
         n_up = 0
         prediction_probs = 0.0
         for ti in training_instances:
-            pool.apply_async(batch_predictions, args=(
-                ti,
-                f_en_en_names,
-                f_en_de_names,
-                f_en_en_theta,
-                f_en_de_theta,
-                phi_wrapper,
-                lr,
-                en_domain,
-                de2id,
-                en2id), callback=batch_prediction_probs_accumulate)
-        pool.close()
-        pool.join()
+            p, fgs = batch_predictions(ti,
+                                       f_en_en_names,
+                                       f_en_de_names,
+                                       f_en_en_theta,
+                                       f_en_de_theta,
+                                       phi_wrapper,
+                                       lr,
+                                       en_domain,
+                                       de2id,
+                                       en2id)
+            prediction_probs += p
+            prediction_str = prediction_str + fgs + '\n'
         print '\nprediction probs:', prediction_probs, n_up
         final_writer = codecs.open(save_predictions_file, 'w', 'utf8')
         final_writer.write(prediction_str)
