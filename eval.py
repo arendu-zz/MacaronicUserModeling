@@ -24,6 +24,9 @@ if __name__ == '__main__':
     correct_at_5 = 0
     correct_at_10 = 0
     correct_at_15 = 0
+    correct_at_25= 0
+    correct_at_50 = 0
+    correct_at_100 = 0
     total = 0
     model_correct_on = {}
     model_most_wrong_on = []

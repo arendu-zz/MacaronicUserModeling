@@ -14,6 +14,14 @@ class PhiWrapper(object):
         self.phi_en_de = phi_en_de
 
 
+class ThetaWrapper(object):
+    def __init__(self, theta_en_en_names, theta_en_en, theta_en_de_names, theta_en_de):
+        self.theta_en_en_names = theta_en_en_names
+        self.theta_en_de_names = theta_en_de_names
+        self.theta_en_en = theta_en_en
+        self.theta_en_de = theta_en_de
+
+
 def pointwise_multiply(m1, m2):
     return np.multiply(m1, m2)
 
