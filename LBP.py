@@ -328,10 +328,10 @@ class FactorNode():
 
     def get_pot(self):
         if self.factor_type == 'en_en':
-            if self.gap > 1:
+            if self.gap > 1 or self.gap is None:
                 return self.graph.pot_en_en
             elif self.gap == 1:
-                return self.graph.phi_en_en_w1
+                return self.graph.pot_en_en_w1
             else:
                 raise BaseException("only 2 kinds of distances are supported ...")
         elif self.factor_type == 'en_de':
