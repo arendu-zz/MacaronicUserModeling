@@ -307,7 +307,7 @@ def batch_sgd_accumulate(result):
 
 
 if __name__ == '__main__':
-    global f_en_en_theta, f_en_de_theta, prediction_probs, prediction_str, intermediate_writer, n_up
+    #global f_en_en_theta, f_en_de_theta, prediction_probs, prediction_str, intermediate_writer, n_up
 
     opt = OptionParser()
     # insert options here
@@ -353,7 +353,6 @@ if __name__ == '__main__':
 
     print 'reading in  ti and domains...'
     training_instances = codecs.open(options.training_instances).readlines()
-    training_instances = training_instances[:10]
 
     de_domain = [i.strip() for i in codecs.open(options.de_domain, 'r', 'utf8').readlines()]
     en_domain = [i.strip() for i in codecs.open(options.en_domain, 'r', 'utf8').readlines()]
@@ -389,7 +388,7 @@ if __name__ == '__main__':
     model_param_writer_name = options.training_instances + '.cpu' + str(cpu_count) + '.' + t_now + '.params'
     intermediate_writer = open(model_param_writer_name + '.tmp', 'w')
     if mode == 'training':
-        for epoch in range(3):
+        for epoch in range(4):
             lr = 0.05
             prediction_probs = 0.0
             print 'epoch:', epoch
