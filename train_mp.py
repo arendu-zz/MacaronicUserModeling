@@ -564,5 +564,9 @@ if __name__ == '__main__':
             prediction_probs += p
             prediction_str = prediction_str + fgs + '\n'
             final_writer.write(fgs + '\n')
+            final_writer.flush()
             final_dist_writer.write(factor_dist + '\n')
+            final_dist_writer.flush()
         print '\nprediction probs:', prediction_probs, n_up
+        final_dist_writer.close()
+        final_writer.close()
