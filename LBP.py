@@ -56,7 +56,7 @@ class FactorGraph():
         for p, f in position_factors:
             if f.factor_type == 'en_de':
                 de_label = f.word_label
-                sl, slp, pred = f.varset[0].get_max_vocab(15)
+                sl, slp, pred = f.varset[0].get_max_vocab(50)
                 pred = ' '.join([p1 + ' ' + p2 for p1, p2 in pred])
                 fg_dct[p] = ' '.join([de_label, sl, slp, pred])
             if f.factor_type == 'en_en':
@@ -64,6 +64,21 @@ class FactorGraph():
                 fg_dct[p] = ' '.join(['', guess_label, ''])
         fg_strings = [fg_dct[k] for k in sorted(fg_dct)]
         return fg_strings
+
+    def to_dist(self):
+        factor_dist = []
+        position_factors = sorted([(f.position, f) for f in self.factors if f.position is not None])
+        for p, f in position_factors:
+            if f.factor_type == 'en_de':
+                v = f.varset[0]
+                truth = v.truth_label if v.truth_label is not None else 'None'
+                guess = v.supervised_label if v.supervised_label is not None else 'None'
+                m = v.get_marginal()
+                i = ' '.join(['%0.4f' % i for i in np.log(m.m)])
+                d = ' ||| '.join([truth, guess, i])
+                factor_dist.append(d)
+        factor_dist = '\n'.join(factor_dist)
+        return factor_dist
 
     def add_factor(self, fac):
         if __debug__: assert fac not in self.factors
@@ -254,6 +269,11 @@ class VariableNode():
         self.supervised_label = supervised_label
         self.supervised_label_index = self.domain.index(supervised_label)
         self.domain_type = domain_type
+        self.truth_label = None
+        self.truth_label_index = None
+
+    def set_truth_label(self, tl):
+        self.truth_label = tl
 
     def __str__(self):
         return "X_" + str(self.id)
