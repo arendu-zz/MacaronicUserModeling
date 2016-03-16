@@ -207,7 +207,6 @@ def batch_predictions(training_instance,
     j_ti = json.loads(training_instance)
     ti = TrainingInstance.from_dict(j_ti)
     sent_id = ti.current_sent[0].sent_id
-
     fg = create_factor_graph(ti=ti,
                              learning_rate=lr,
                              theta_en_de=f_en_de_theta,
@@ -401,7 +400,7 @@ if __name__ == '__main__':
     pool.close()
     pool.join()
     print '\nprediction probs:', prediction_probs
-    for epoch in range(2):
+    for epoch in range(1):
         lr = 0.05
         print 'epoch:', epoch, 'theta:', f_en_en_theta, f_en_de_theta
         random.shuffle(all_training_instances)

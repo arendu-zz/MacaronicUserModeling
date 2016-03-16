@@ -392,8 +392,6 @@ def batch_sgd_accumulate(result):
 
 
 if __name__ == '__main__':
-    # global f_en_en_theta, f_en_de_theta, prediction_probs, prediction_str, intermediate_writer, n_up
-
     opt = OptionParser()
     # insert options here
     opt.add_option('--ti', dest='training_instances', default='')
@@ -503,7 +501,7 @@ if __name__ == '__main__':
     model_param_writer_name = options.training_instances + '.cpu' + str(cpu_count) + '.' + t_now + '.params'
     intermediate_writer = open(model_param_writer_name + '.tmp', 'w')
     if mode == 'training':
-        for epoch in range(3):
+        for epoch in range(4):
             lr = 0.05
             prediction_probs = 0.0
             print 'epoch:', epoch

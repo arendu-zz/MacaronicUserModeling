@@ -13,7 +13,7 @@ sys.stdout.encoding = 'utf-8'
 if __name__ == '__main__':
     opt = OptionParser()
     # insert options here
-    opt.add_option('--ti', dest='ti_file', default='mturk-data/ti.50')
+    opt.add_option('--ti', dest='ti_file', default='')
     (options, _) = opt.parse_args()
     if options.ti_file.strip() == '':
         sys.stderr.write('Usage: python make_user_list.py --ti [user list file]\n')

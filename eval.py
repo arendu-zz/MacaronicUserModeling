@@ -1,3 +1,4 @@
+#!/usr/bin/env python 
 __author__ = 'arenduchintala'
 import sys
 import codecs
@@ -23,10 +24,8 @@ if __name__ == '__main__':
     correct_at_0 = 0
     correct_at_5 = 0
     correct_at_10 = 0
-    correct_at_15 = 0
     correct_at_25= 0
     correct_at_50 = 0
-    correct_at_100 = 0
     total = 0
     model_correct_on = {}
     model_most_wrong_on = []
@@ -45,8 +44,10 @@ if __name__ == '__main__':
             mco = model_correct_on.get(label, 0)
             mco += 1
             model_correct_on[label] = mco
-            correct_at_15 += 1
+            correct_at_50 += 1
             pos = guesses.index(label)
+            if pos <= 25:
+                correct_at_25 += 1
             if pos <= 10:
                 correct_at_10 += 1
             if pos <= 5:
@@ -61,7 +62,8 @@ if __name__ == '__main__':
     print 'prec at 0 ', float(correct_at_0) * 100 / total
     print 'prec at 5 ', float(correct_at_5) * 100 / total
     print 'prec at 10', float(correct_at_10) * 100 / total
-    print 'prec at 15', float(correct_at_15) * 100 / total
+    print 'prec at 25', float(correct_at_25) * 100 / total
+    print 'prec at 50', float(correct_at_50) * 100 / total
     tups = sorted([(c, l) for l, c in model_correct_on.iteritems()], reverse=True)
     most_correct = [l + ',' + str(c) for c, l in tups]
     print 'most correct  :', ' '.join(most_correct[:20])
