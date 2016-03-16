@@ -340,9 +340,9 @@ if __name__ == '__main__':
     print 'read ti and domains...'
     basic_f_en_en = ['skipgram']
     f_en_en_theta = np.zeros((1, len(basic_f_en_en)))
-    print 'reading phi wiwj'
+    print 'reading phi pmi'
     phi_en_en1 = np.loadtxt(options.phi_wiwj)
-    phi_en_en1[phi_en_en1 < 1.0 / len(en_domain)] = 0.0  # make sparse...
+
     print np.count_nonzero(phi_en_en1)
     phi_en_en1 = np.reshape(phi_en_en1, (len(en_domain) * len(en_domain), 1))
     ss = np.shape(phi_en_en1)
@@ -353,12 +353,12 @@ if __name__ == '__main__':
     f_en_de_theta = np.zeros((1, len(basic_f_en_de)))
     print 'reading phi ed'
     phi_en_de1 = np.loadtxt(options.phi_ed)
-    phi_en_de1[phi_en_de1 < 0.5] = 0.0
+
     phi_en_de1 = np.reshape(phi_en_de1, (len(en_domain) * len(de_domain), 1))
 
     print 'reading phi ped'
     phi_en_de2 = np.loadtxt(options.phi_ped)
-    phi_en_de2[phi_en_de2 < 0.5] = 0.0
+
     phi_en_de2 = np.reshape(phi_en_de2, (len(en_domain) * len(de_domain), 1))
     phi_en_de3 = np.zeros_like(phi_en_de1)
     phi_en_de = np.concatenate((phi_en_de1, phi_en_de2, phi_en_de3), axis=1)
