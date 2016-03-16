@@ -98,9 +98,9 @@ if __name__ == '__main__':
 
             w_pg = np.exp(pred_dist)
             # w_pg_top = np.argpartition(w_pg, -1)[-1:]
-            # w_pg_bottom = np.argpartition(w_pg, len(vocabs) - 1)[:len(vocabs) - 1]
-            # w_pg[w_pg_bottom] = 0.0
-            # w_pg = renormalize(w_pg)
+            w_pg_bottom = np.argpartition(w_pg, len(vocabs) - 1)[:len(vocabs) - 1]
+            w_pg[w_pg_bottom] = 0.0
+            w_pg = renormalize(w_pg)
             v_pg = vocab_vecs
             cos_pg2t = cosine_sim(weighted_mean_vec(w_tl, v_tl), weighted_mean_vec(w_pg, v_pg))
 
@@ -114,9 +114,18 @@ if __name__ == '__main__':
     plt.xlabel('sim(pg,t)')
     plt.ylabel('sim(lg,t)')
     plt.title('Cosine Similarity Relation')
-    plt.savefig(options.dist_file + '.plot.png')
+    plt.savefig(options.dist_file + '.plot.best.png')
     print p_corrcoef, p_pval
     print s_corrcoef, s_pval
+
+    '''
+    0.335967 1.05945535069e-222  for expected
+    0.287609642002 3.9861983184e-161
+
+    0.36013 5.92051261798e-258 for best
+    0.261565189546 1.2960524574e-132
+
+    '''
     # heatmap, xedges, yedges = np.histogram2d(expected_pg2truth, ug2truth, bins=100)
     # extent = [xedges[0], xedges[-1], yedges[0], yedges[-1]]
     # plt.clf()
