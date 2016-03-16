@@ -456,7 +456,8 @@ if __name__ == '__main__':
             domain2theta['en_en', d] = f_en_en_theta.copy()
             domain2theta['en_de', d] = f_en_de_theta.copy()
     else:
-        ext = '.user_apapt' if options.user_adapt else ('.exp_adapt' if options.experience_adapt else '')
+        ext = '.user_adapt' if options.user_adapt else ('.exp_adapt' if options.experience_adapt else '')
+        print 'trying to read', options.load_params_file + ext
         een, eet, edn, edt, d2t = read_params(options.load_params_file + ext)
         save_predictions_file = options.save_predictions_file
         f_en_en_names = een
@@ -529,11 +530,11 @@ if __name__ == '__main__':
             print f_en_de_names, f_en_de_theta
             print '\nprediction probs:', prediction_probs
             lr *= 0.75
-            ext = '.user_apapt' if options.user_adapt else ('.exp_adapt' if options.experience_adapt else '')
+            ext = '.user_adapt' if options.user_adapt else ('.exp_adapt' if options.experience_adapt else '')
             final_writer = codecs.open(options.save_params_file + ext + '.iter' + str(epoch), 'w', 'utf8')
             save_params(final_writer, f_en_en_theta, f_en_de_theta, f_en_en_names, f_en_de_names, domain2theta)
         print '\ntheta final:', f_en_en_theta, f_en_de_theta
-        ext = '.user_apapt' if options.user_adapt else ('.exp_adapt' if options.experience_adapt else '')
+        ext = '.user_adapt' if options.user_adapt else ('.exp_adapt' if options.experience_adapt else '')
         final_writer = codecs.open(options.save_params_file + ext, 'w', 'utf8')
         save_params(final_writer, f_en_en_theta, f_en_de_theta, f_en_en_names, f_en_de_names, domain2theta)
     else:
@@ -544,7 +545,7 @@ if __name__ == '__main__':
         lr = 0.05
         n_up = 0
         prediction_probs = 0.0
-        ext = '.user_apapt' if options.user_adapt else ('.exp_adapt' if options.experience_adapt else '')
+        ext = '.user_adapt' if options.user_adapt else ('.exp_adapt' if options.experience_adapt else '')
         final_writer = codecs.open(save_predictions_file + ext, 'w', 'utf8')
         final_dist_writer = codecs.open(save_predictions_file + ext + '.dist', 'w', 'utf8')
         for ti in training_instances:
