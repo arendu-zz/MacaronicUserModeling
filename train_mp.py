@@ -114,6 +114,7 @@ def get_var_node_pair(sorted_current_sent, current_guesses, current_revealed, en
     var_node_pairs = []
 
     for idx, simplenode in enumerate(sorted_current_sent):
+        truth = simplenode.l1_parent
         if simplenode.lang == 'en':
             v = VariableNode(id=idx, var_type=VAR_TYPE_GIVEN, domain_type='en', domain=en_domain,
                              supervised_label=simplenode.l2_word)
@@ -131,6 +132,8 @@ def get_var_node_pair(sorted_current_sent, current_guesses, current_revealed, en
                                  domain_type='en',
                                  domain=en_domain,
                                  supervised_label=guess.guess)
+                if var_type == VAR_TYPE_PREDICTED:
+                    v.set_truth_label(truth)
 
             except AssertionError:
                 print 'something bad...'
@@ -301,7 +304,8 @@ def batch_predictions(training_instance,
     fg.treelike_inference(3)
     p = fg.get_posterior_probs()
     fgs = '\n'.join(['*SENT_ID:' + str(sent_id)] + fg.to_string())
-    return [p, fgs]
+    factor_dist = fg.to_dist()
+    return [p, fgs, factor_dist]
 
 
 def batch_prediction_probs_accumulate(result):
@@ -542,21 +546,23 @@ if __name__ == '__main__':
         lr = 0.05
         n_up = 0
         prediction_probs = 0.0
-        for ti in training_instances:
-            p, fgs = batch_predictions(ti,
-                                       f_en_en_names,
-                                       f_en_de_names,
-                                       f_en_en_theta,
-                                       f_en_de_theta,
-                                       phi_wrapper,
-                                       lr,
-                                       en_domain,
-                                       de2id,
-                                       en2id,
-                                       domain2theta)
-            prediction_probs += p
-            prediction_str = prediction_str + fgs + '\n'
-        print '\nprediction probs:', prediction_probs, n_up
         ext = '.user_apapt' if options.user_adapt else ('.exp_adapt' if options.experience_adapt else '')
         final_writer = codecs.open(save_predictions_file + ext, 'w', 'utf8')
-        final_writer.write(prediction_str)
+        final_dist_writer = codecs.open(save_predictions_file + ext + '.dist', 'w', 'utf8')
+        for ti in training_instances:
+            p, fgs, factor_dist = batch_predictions(ti,
+                                                    f_en_en_names,
+                                                    f_en_de_names,
+                                                    f_en_en_theta,
+                                                    f_en_de_theta,
+                                                    phi_wrapper,
+                                                    lr,
+                                                    en_domain,
+                                                    de2id,
+                                                    en2id,
+                                                    domain2theta)
+            prediction_probs += p
+            prediction_str = prediction_str + fgs + '\n'
+            final_writer.write(fgs + '\n')
+            final_dist_writer.write(factor_dist + '\n')
+        print '\nprediction probs:', prediction_probs, n_up
