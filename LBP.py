@@ -485,11 +485,12 @@ class FactorNode():
             # assert marginals.shape == self.potential_table.table.shape
             approx_marginals = array_utils.make_sparse_and_dot(c, r)
             # beliefs = np.multiply(marginals, self.potential_table.table)  # O(n)
-            approx_beliefs = array_utils.sparse_multiply_and_normalize(approx_marginals, self.potential_table.table)
+            approx_beliefs_mat, approx_beliefs_dict = array_utils.sparse_multiply_and_normalize(approx_marginals,
+                                                                                                self.potential_table.table)
             # beliefs = array_utils.normalize(beliefs)
             # if c[10, 0] != c[11, 0]:
             #    print 'c not uniform...'
-            beliefs = approx_beliefs
+            beliefs = approx_beliefs_mat
 
         return beliefs
 

@@ -108,13 +108,15 @@ def make_sparse_and_dot(m1, m2, k=100):
 
 def sparse_multiply_and_normalize(s_m1, m2):
     m2_z = np.zeros_like(m2)
+    m2_d = {}
     n = 0.0
     for (x, y), v in s_m1.iteritems():
         m2_z[x, y] = m2[x, y] * v
         n += m2_z[x, y]
     for x, y in s_m1:
         m2_z[x, y] = m2_z[x, y] / n
-    return m2_z
+        m2_d[x, y] = m2_z[x, y]
+    return m2_z, m2_d
 
 
 def sd_matrix_multiply(s1, d2):
