@@ -4,6 +4,7 @@ from numpy import float32 as DTYPE
 import random
 import array_utils
 from scipy import sparse
+import pdb
 import time
 
 global VAR_TYPE_LATENT, VAR_TYPE_PREDICTED, VAR_TYPE_GIVEN, UNARY_FACTOR, BINARY_FACTOR
@@ -42,6 +43,9 @@ class FactorGraph():
         self.regularization_param = 0.01
         self.learning_rate = 0.1
         self.cg_times = []
+        self.exp_cg_times = []
+        self.obs_cg_times = []
+        self.diff_cg_times = []
         self.gg_times = []
         self.sgg_times = []
         self.active_domains = {}
@@ -157,7 +161,7 @@ class FactorGraph():
     def treelike_inference(self, iterations):
         iterations = iterations if self.isLoopy else 1
         for _ in range(iterations):
-            # print 'iteration', _
+            # print 'inference iterations', _
             _rand_key = random.sample(self.variables.keys(), 1)[0]
             _root = self.variables[_rand_key]
             _schedule = self.get_message_schedule(_root)
@@ -457,13 +461,15 @@ class FactorNode():
         # takes the last messages coming into this factor
         # normalizes the messages
         # multiplies it into a matrix with same dim as the potentials
-
         r = None
         c = None
         if len(self.varset) == 1:
             m = Message.new_message(self.varset[0].domain, 1.0 / len(self.varset[0].domain))
             m.renormalize()
-            marignals = m.m
+            marginals = m.m
+            assert marginals.shape == self.potential_table.table.shape
+            beliefs = np.multiply(marginals, self.potential_table.table)  # O(n)
+            beliefs = array_utils.normalize(beliefs)  # todo: make this faster?
         else:
             for v in self.varset:
                 vd = self.potential_table.var_id2dim[v.id]
@@ -475,18 +481,25 @@ class FactorNode():
                     r = np.reshape(m.m, (1, np.size(m.m)))  # row vector
                 else:
                     raise NotImplementedError("only supports pairwise factors..")
-            marignals = array_utils.dd_matrix_multiply(c, r)  # np.dot(c, r)
-        beliefs = np.multiply(marignals, self.potential_table.table)  # O(n)
-        # beliefs = array_utils.induce_s_pointwise_multiply_clip(marignals, self.potential_table.table, k=1) #O(n)
-        beliefs = array_utils.normalize(beliefs)
+            # marginals = array_utils.dd_matrix_multiply(c, r)  # np.dot(c, r)
+            # assert marginals.shape == self.potential_table.table.shape
+            approx_marginals = array_utils.make_sparse_and_dot(c, r)
+            # beliefs = np.multiply(marginals, self.potential_table.table)  # O(n)
+            approx_beliefs = array_utils.sparse_multiply_and_normalize(approx_marginals, self.potential_table.table)
+            # beliefs = array_utils.normalize(beliefs)
+            # if c[10, 0] != c[11, 0]:
+            #    print 'c not uniform...'
+            beliefs = approx_beliefs
+
         return beliefs
 
     def get_observed_factor(self):
-        of = np.zeros_like(self.potential_table.table)
+        # of = np.zeros_like(self.potential_table.table)
         cell = sorted([(self.potential_table.var_id2dim[v.id], v.supervised_label_index) for v in self.varset])
         cell = tuple([o for d, o in cell])
-        of[cell] = 1.0
-        return of
+        # print 'cell', cell, self.potential_table.table.shape
+        # of[cell] = 1.0
+        return [cell]
 
     def get_gradient(self):
         cg = time.time()
@@ -515,9 +528,20 @@ class FactorNode():
         return grad1
 
     def cell_gradient(self):
-        obs_counts = self.get_observed_factor()
+        obs_cg = time.time()
+        cell = self.get_observed_factor()
+        self.graph.obs_cg_times.append(time.time() - obs_cg)
+        exp_cg = time.time()
         exp_counts = self.get_factor_beliefs()  # this is the same because I assume binary features  values at the "cell level"
-        return obs_counts - exp_counts
+        self.graph.exp_cg_times.append(time.time() - exp_cg)
+        diff_cg = time.time()
+        d = exp_counts
+        assert len(cell) == 1
+        for c in cell:
+            d[c] = 1.0 - d[c]
+        # d[cell] = 1.0 - d[cell]
+        self.graph.diff_cg_times.append(time.time() - diff_cg)
+        return d
 
 
 class ObservedFactor(FactorNode):

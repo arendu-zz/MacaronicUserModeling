@@ -1,6 +1,7 @@
 __author__ = 'arenduchintala'
 import numpy as np
 import time
+import itertools
 from scipy import sparse
 from numpy import float32 as DTYPE
 
@@ -32,15 +33,17 @@ def clip(m1):
 
 
 def normalize(m1):
-    if np.sum(m1) > 0.0:
+    s = np.sum(m1)
+    if s > 0.0:
         try:
-            return m1 / np.sum(m1)
+            return m1 / s
         except FloatingPointError:
-            print np.sum(m1)
-            print np.sum(m1) > 0.0
+            print s
+            print s > 0.0
             raise FloatingPointError()
     else:
-        return np.zeros(np.shape(m1))
+        m1.fill(0)
+        return m1
 
 
 def induce_s_pointwise_multiply_clip(d1, d2, k=1000):
@@ -90,6 +93,28 @@ def induce_s_multiply_threshold(s1, d2):
 
 def dd_matrix_multiply(m1, m2):
     return m1.dot(m2)
+
+
+def make_sparse_and_dot(m1, m2, k=100):
+    m1_shaped = np.reshape(m1, np.size(m1))
+    m2_shaped = np.reshape(m2, np.size(m2))
+    m1_max_idx = np.argpartition(m1_shaped, -k)[-k:]
+    m2_max_idx = np.argpartition(m2_shaped, -k)[-k:]
+    d = {}
+    for x, y in itertools.product(m1_max_idx, m2_max_idx):
+        d[x, y] = m1[x, 0] * m2[0, y]
+    return d
+
+
+def sparse_multiply_and_normalize(s_m1, m2):
+    m2_z = np.zeros_like(m2)
+    n = 0.0
+    for (x, y), v in s_m1.iteritems():
+        m2_z[x, y] = m2[x, y] * v
+        n += m2_z[x, y]
+    for x, y in s_m1:
+        m2_z[x, y] = m2_z[x, y] / n
+    return m2_z
 
 
 def sd_matrix_multiply(s1, d2):
