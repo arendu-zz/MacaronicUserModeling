@@ -392,6 +392,7 @@ def batch_sgd_accumulate(result):
 
 
 if __name__ == '__main__':
+    random.seed(1234)
     opt = OptionParser()
     # insert options here
     opt.add_option('--ti', dest='training_instances', default='')
