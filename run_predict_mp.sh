@@ -1,7 +1,6 @@
 #!/bin/sh
 set -e
-TI_DIR=$HOME"/Projects/macaronic-feature-extraction/training-instances"
-FEATS_DIR=$HOME"/Projects/macaronic-feature-extraction/feats"
+source ./config.src
 SIZE="50"
 PRE="vocab."$SIZE
 
