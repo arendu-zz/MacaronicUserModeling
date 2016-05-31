@@ -1,7 +1,6 @@
 #!/bin/sh
 set -e
-TI_DIR="mturk-data"
-FEATS_DIR="feats"
+source ./config.src
 SIZE="50"
 PRE="vocab."$SIZE
 
