@@ -488,7 +488,6 @@ class FactorNode():
                 approx_marginals = au.make_sparse_and_dot(c, r)
                 approx_beliefs_mat, _ = au.sparse_multiply_and_normalize(approx_marginals, self.potential_table.table)
                 beliefs = approx_beliefs_mat
-                beliefs = au.normalize(beliefs)
             else:
                 sys.stderr.write('-')
                 marginals = au.dd_matrix_multiply(c, r)  # np.dot(c, r)
