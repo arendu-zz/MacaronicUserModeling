@@ -1,8 +1,9 @@
 __author__ = 'arenduchintala'
+import sys
 import numpy as np
 from numpy import float32 as DTYPE
 import random
-import array_utils
+import array_utils as au
 from scipy import sparse
 import pdb
 import time
@@ -49,6 +50,7 @@ class FactorGraph():
         self.gg_times = []
         self.sgg_times = []
         self.active_domains = {}
+        self.use_approx_learning = False
         if isinstance(self.theta_en_en_names, tuple):
             self.theta_en_en_names = self.theta_en_en_names[0]
         if isinstance(self.theta_en_de_names, tuple):
@@ -469,7 +471,7 @@ class FactorNode():
             marginals = m.m
             assert marginals.shape == self.potential_table.table.shape
             beliefs = np.multiply(marginals, self.potential_table.table)  # O(n)
-            beliefs = array_utils.normalize(beliefs)  # todo: make this faster?
+            beliefs = au.normalize(beliefs)  # todo: make this faster?
         else:
             for v in self.varset:
                 vd = self.potential_table.var_id2dim[v.id]
@@ -481,17 +483,20 @@ class FactorNode():
                     r = np.reshape(m.m, (1, np.size(m.m)))  # row vector
                 else:
                     raise NotImplementedError("only supports pairwise factors..")
-            # marginals = array_utils.dd_matrix_multiply(c, r)  # np.dot(c, r)
-            # assert marginals.shape == self.potential_table.table.shape
-            approx_marginals = array_utils.make_sparse_and_dot(c, r)
-            # beliefs = np.multiply(marginals, self.potential_table.table)  # O(n)
-            approx_beliefs_mat, approx_beliefs_dict = array_utils.sparse_multiply_and_normalize(approx_marginals,
-                                                                                                self.potential_table.table)
-            # beliefs = array_utils.normalize(beliefs)
+            if self.graph.use_approx_learning:
+                sys.stderr.write('+')
+                approx_marginals = au.make_sparse_and_dot(c, r)
+                approx_beliefs_mat, _ = au.sparse_multiply_and_normalize(approx_marginals, self.potential_table.table)
+                beliefs = approx_beliefs_mat
+            else:
+                sys.stderr.write('-')
+                marginals = au.dd_matrix_multiply(c, r)  # np.dot(c, r)
+                assert marginals.shape == self.potential_table.table.shape
+                beliefs = np.multiply(marginals, self.potential_table.table)  # O(n)
+                beliefs = au.normalize(beliefs)
+                pass
             # if c[10, 0] != c[11, 0]:
             #    print 'c not uniform...'
-            beliefs = approx_beliefs_mat
-
         return beliefs
 
     def get_observed_factor(self):
@@ -521,8 +526,8 @@ class FactorNode():
         # print 'nz appx, orig, full :', np.count_nonzero(f_ij_approx), np.count_nonzero(f_ij), np.size(f_ij)
         grad1 = (self.get_phi().T.dot(f_ij)).T
         # grad1 = (self.get_phi_csc().T.dot(f_ij)).T
-        # grad_approx = array_utils.induce_s_mutliply(f_ij, self.get_phi().T, k=1000000000)
-        # grad_approx = array_utils.induce_s_mutliply_clip(f_ij, self.get_phi().T, k=1000)
+        # grad_approx = au.induce_s_mutliply(f_ij, self.get_phi().T, k=1000000000)
+        # grad_approx = au.induce_s_mutliply_clip(f_ij, self.get_phi().T, k=1000)
         # grad1 = grad_approx.T
         # if __debug__: assert  np.allclose(grad1, grad2.T)
         self.graph.gg_times.append(time.time() - gg)
@@ -568,7 +573,7 @@ class Message():
         s = np.sum(self.m)
         if s > 0:
             # self.m = self.m / np.sum(self.m)
-            self.m = array_utils.normalize(self.m)
+            self.m = au.normalize(self.m)
         else:
             e = np.empty_like(self.m)
             e.fill(1.0 / np.size(self.m))
@@ -640,5 +645,5 @@ def pointwise_multiply(m1, m2):
         # print 'tt:', np.sum(m1.m), np.sum(m2.m)
         if __debug__: assert np.shape(m1.m) == np.shape(m2.m)
         # if __debug__: assert  np.abs(np.sum(m1.m) - 1) < 1e-5
-        new_m = array_utils.pointwise_multiply(m1.m, m2.m)
+        new_m = au.pointwise_multiply(m1.m, m2.m)
     return Message(new_m)

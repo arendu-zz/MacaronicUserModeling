@@ -341,6 +341,7 @@ def batch_sgd(training_instance,
                              en2id=en2id,
                              d2t=d2t)
 
+    fg.use_approx_learning = options.use_approx_learning
     fg.initialize()
 
     fg.treelike_inference(3)
@@ -365,10 +366,13 @@ def batch_sgd(training_instance,
     if len(fg.variables) > 10:
         print '\nggtimes    :', np.sum(fg.gg_times) / len(fg.gg_times), 'total', np.sum(fg.gg_times), 'len', len(
             fg.gg_times)
-        print 'cgtimes    :', np.sum(fg.cg_times) / len(fg.cg_times), 'total', np.sum(fg.cg_times), 'len', len(fg.cg_times)
-        print 'obs_cgtimes:', np.sum(fg.obs_cg_times) / len(fg.obs_cg_times), 'total', np.sum(fg.obs_cg_times), 'len', len(
+        print 'cgtimes    :', np.sum(fg.cg_times) / len(fg.cg_times), 'total', np.sum(fg.cg_times), 'len', len(
+            fg.cg_times)
+        print 'obs_cgtimes:', np.sum(fg.obs_cg_times) / len(fg.obs_cg_times), 'total', np.sum(
+            fg.obs_cg_times), 'len', len(
             fg.obs_cg_times)
-        print 'exp_cgtimes:', np.sum(fg.exp_cg_times) / len(fg.exp_cg_times), 'total', np.sum(fg.exp_cg_times), 'len', len(
+        print 'exp_cgtimes:', np.sum(fg.exp_cg_times) / len(fg.exp_cg_times), 'total', np.sum(
+            fg.exp_cg_times), 'len', len(
             fg.exp_cg_times)
         print 'dif_cgtimes:', np.sum(fg.diff_cg_times) / len(fg.diff_cg_times), 'total', np.sum(
             fg.diff_cg_times), 'len', len(
@@ -403,6 +407,7 @@ def batch_sgd_accumulate(result):
 
 
 if __name__ == '__main__':
+    random.seed(1234)
     opt = OptionParser()
     # insert options here
     opt.add_option('--ti', dest='training_instances', default='')
@@ -419,6 +424,7 @@ if __name__ == '__main__':
     opt.add_option('--history', dest='history', default=False, action='store_true')
     opt.add_option('--session_history', dest='session_history', default=False, action='store_true')
     opt.add_option('--user_adapt', dest='user_adapt', default=False, action='store_true')
+    opt.add_option('--use_approx_learning', dest='use_approx_learning', default=False, action='store_true')
     opt.add_option('--experience_adapt', dest='experience_adapt', default=False, action='store_true')
 
     (options, _) = opt.parse_args()
@@ -432,8 +438,9 @@ if __name__ == '__main__':
     else:
         pass
 
-    print options.user_adapt, ' is the user adapt'
-    print options.experience_adapt, 'is the experienence adapt'
+    print 'user adapt:', options.user_adapt
+    print 'experienence adapt:', options.experience_adapt
+    print 'use_approx_learning:', options.use_approx_learning
 
     cpu_count = 4 if options.cpus.strip() == '' else int(options.cpus)
     print 'cpu count:', cpu_count
