@@ -32,6 +32,12 @@ def clip(m1):
     return m1
 
 
+def sparse_normalize(m1, c_idx, r_idx):
+    s = np.sum(m1[np.ix_(c_idx, r_idx)])
+    m1[np.ix_(c_idx, r_idx)] = m1[np.ix_(c_idx, r_idx)] / s
+    return m1
+
+
 def normalize(m1):
     s = np.sum(m1)
     if s > 0.0:
@@ -104,6 +110,23 @@ def make_sparse_and_dot(m1, m2, k=100):
     for x, y in itertools.product(m1_max_idx, m2_max_idx):
         d[x, y] = m1[x, 0] * m2[0, y]
     return d
+
+
+def sparse_pointwise_multiply(sparse_m, c_idx, r_idx, dense_m):
+    z = np.zeros_like(dense_m)
+    z[np.ix_(c_idx, r_idx)] = np.multiply(sparse_m[np.ix_(c_idx, r_idx)], dense_m[np.ix_(c_idx, r_idx)])
+    return z
+
+
+def sparse_dot(m1, m2, k=100):
+    assert m1.shape[0] == m2.shape[1]
+    assert m1.shape[1] == m2.shape[0] == 1
+    n = m1.shape[0]
+    m1_idx = np.argpartition(-m1, k, axis=0)[:k].ravel()
+    m2_idx = np.argpartition(-m2, k)[:, :k].ravel()
+    out = np.zeros((n, n))
+    out[np.ix_(m1_idx, m2_idx)] = np.dot(m1[m1_idx], m2[:, m2_idx])
+    return out, m1_idx, m2_idx
 
 
 def sparse_multiply_and_normalize(s_m1, m2):
