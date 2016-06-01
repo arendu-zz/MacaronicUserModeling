@@ -41,7 +41,7 @@ class FactorGraph():
         self.messages = {}
         self.normalize_messages = True
         self.isLoopy = None
-        self.regularization_param = 0.01
+        self.regularization_param = 0.1
         self.learning_rate = 0.1
         self.cg_times = []
         self.exp_cg_times = []
@@ -265,8 +265,11 @@ class FactorGraph():
 
 class VariableNode():
     def __init__(self, id, var_type, domain_type, domain, supervised_label):
-        if __debug__: assert isinstance(id, int)
-        if __debug__: assert supervised_label in domain
+        if not isinstance(id, int):
+            print 'id ' , id, 'not an int'
+        if supervised_label not in domain:
+            print supervised_label, 'not in' , domain
+            exit(-1)
         self.id = id
         self.var_type = var_type
         self.domain = domain
@@ -484,7 +487,7 @@ class FactorNode():
                 else:
                     raise NotImplementedError("only supports pairwise factors..")
             if self.graph.use_approx_learning:
-                sys.stderr.write('+')
+                #sys.stderr.write('+')
                 # approx_marginals = au.make_sparse_and_dot(c, r)
                 approx_marginals, c_idx, r_idx = au.sparse_dot(c, r)
                 # approx_beliefs_mat, _ = au.sparse_multiply_and_normalize(approx_marginals, self.potential_table.table)
@@ -494,7 +497,7 @@ class FactorNode():
                 # beliefs = au.normalize(beliefs)
                 beliefs = au.sparse_normalize(beliefs, c_idx, r_idx)
             else:
-                sys.stderr.write('-')
+                #sys.stderr.write('-')
                 marginals = au.dd_matrix_multiply(c, r)  # np.dot(c, r)
                 assert marginals.shape == self.potential_table.table.shape
                 beliefs = np.multiply(marginals, self.potential_table.table)  # O(n)
