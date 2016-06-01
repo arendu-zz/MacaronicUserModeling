@@ -163,6 +163,7 @@ def create_factor_graph(ti, learning_rate,
                      phi_en_en_w1=phi_wrapper.phi_en_en_w1)
 
     fg.learning_rate = learning_rate
+    fg.use_approx_learning = options.use_approx_learning
 
     if options.user_adapt:
         d = ti.user_id
@@ -409,6 +410,7 @@ if __name__ == '__main__':
     opt.add_option('--history', dest='history', default=False, action='store_true')
     opt.add_option('--session_history', dest='session_history', default=False, action='store_true')
     opt.add_option('--user_adapt', dest='user_adapt', default=False, action='store_true')
+    opt.add_option('--use_approx_learning', dest='use_approx_learning', default=False, action='store_true')
     opt.add_option('--experience_adapt', dest='experience_adapt', default=False, action='store_true')
 
     (options, _) = opt.parse_args()
@@ -422,8 +424,9 @@ if __name__ == '__main__':
     else:
         pass
 
-    print options.user_adapt, ' is the user adapt'
-    print options.experience_adapt, 'is the experienence adapt'
+    print 'user adapt:', options.user_adapt
+    print 'experienence adapt:', options.experience_adapt
+    print 'use_approx_learning:', options.use_approx_learning
 
     cpu_count = 4 if options.cpus.strip() == '' else int(options.cpus)
     print 'cpu count:', cpu_count

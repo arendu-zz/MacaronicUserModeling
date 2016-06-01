@@ -363,7 +363,7 @@ def batch_sgd(training_instance,
         sample_ag = None
         g_en_en, g_en_de = fg.return_gradient()
     # sys.stderr.write('+')
-    if len(fg.variables) > 10:
+    if len(fg.variables) > 5:
         print '\nggtimes    :', np.sum(fg.gg_times) / len(fg.gg_times), 'total', np.sum(fg.gg_times), 'len', len(
             fg.gg_times)
         print 'cgtimes    :', np.sum(fg.cg_times) / len(fg.cg_times), 'total', np.sum(fg.cg_times), 'len', len(
