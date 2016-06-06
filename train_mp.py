@@ -41,6 +41,7 @@ def error_msg():
                 --phi_pmi_w1 [pmi w1 file]\n \
                 --phi_ed [ed file]\n \
                 --phi_ped [ped file]\n \
+                --phi_len [length file]\n \
                 --cpu [4 by default]\n \
                 --save_params [save params to this file] or \n \
                 --load_params [load params from this file]] --save_predictions [save predictions to file]\n')
@@ -403,6 +404,7 @@ if __name__ == '__main__':
     opt.add_option('--phi_pmi_w1', dest='phi_pmi_w1', default='')
     opt.add_option('--phi_ed', dest='phi_ed', default='')
     opt.add_option('--phi_ped', dest='phi_ped', default='')
+    opt.add_option('--phi_len', dest='phi_len', default='')
     opt.add_option('--cpu', dest='cpus', default='')
     opt.add_option('--save_params', dest='save_params_file', default='')
     opt.add_option('--load_params', dest='load_params_file', default='')
@@ -415,7 +417,7 @@ if __name__ == '__main__':
 
     (options, _) = opt.parse_args()
 
-    if options.training_instances == '' or options.en_domain == '' or options.de_domain == '' or options.phi_pmi_w1 == '' or options.phi_pmi == '' or options.phi_ed == '' or options.phi_ped == '':
+    if options.training_instances == '' or options.en_domain == '' or options.de_domain == '' or options.phi_pmi_w1 == '' or options.phi_pmi == '' or options.phi_ed == '' or options.phi_ped == '' or options.phi_len == '':
         error_msg()
         exit(1)
     elif options.save_params_file == '' and options.load_params_file == '' and options.save_predictions_file == '':
@@ -453,7 +455,7 @@ if __name__ == '__main__':
     if mode == 'training':
         f_en_en_names = ['pmi', 'pmi_w1']
         f_en_en_theta = np.zeros((1, len(f_en_en_names)))
-        f_en_de_names = ['ed', 'ped', 'full_history', 'hit_history']
+        f_en_de_names = ['ed', 'ped', 'length', 'full_history', 'hit_history']
         f_en_de_theta = np.zeros((1, len(f_en_de_names)))
         domain2theta = {}
         for d in domains:
@@ -496,9 +498,13 @@ if __name__ == '__main__':
     print 'reading phi ped'
     phi_en_de2 = np.loadtxt(options.phi_ped)
     phi_en_de2 = np.reshape(phi_en_de2, (len(en_domain) * len(de_domain), 1))
+
+    phi_en_de_len = np.loadtxt(options.phi_len)
+    phi_en_de_len = np.reshape(phi_en_de_len, (len(en_domain) * len(de_domain),1))
+
     phi_en_de3 = np.zeros_like(phi_en_de1)  # place holder for history
     phi_en_de4 = np.zeros_like(phi_en_de1)  # place holder for incorrect history
-    phi_en_de = np.concatenate((phi_en_de1, phi_en_de2, phi_en_de3, phi_en_de4), axis=1)
+    phi_en_de = np.concatenate((phi_en_de1, phi_en_de2, phi_en_de_len, phi_en_de3, phi_en_de4), axis=1)
     phi_en_de.astype(DTYPE)
 
     phi_wrapper = PhiWrapper(phi_en_en, phi_en_en_w1, phi_en_de)
