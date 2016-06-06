@@ -31,22 +31,6 @@ def apply_regularization(reg, grad, lr, theta):
     return grad
 
 
-def error_msg():
-    sys.stderr.write(
-        'Usage: python real_phi_test.py\n\
-                --ti [training instance file]\n \
-                --end [en domain file]\n \
-                --ded [de domain file]\n \
-                --phi_pmi [pmi file]\n \
-                --phi_pmi_w1 [pmi w1 file]\n \
-                --phi_ed [ed file]\n \
-                --phi_ped [ped file]\n \
-                --phi_len [length file]\n \
-                --cpu [4 by default]\n \
-                --save_params [save params to this file] or \n \
-                --load_params [load params from this file]] --save_predictions [save predictions to file]\n')
-
-
 def find_guess(simplenode_id, guess_list):
     for cg in guess_list:
         if simplenode_id == cg.id:
@@ -142,7 +126,7 @@ def get_var_node_pair(sorted_current_sent, current_guesses, current_revealed, en
     return var_node_pairs
 
 
-def create_factor_graph(ti, learning_rate,
+def create_factor_graph(ti,ti_tgf, learning_rate,
                         theta_en_en_names, theta_en_de_names,
                         theta_en_en, theta_en_de,
                         phi_wrapper,
@@ -180,7 +164,18 @@ def create_factor_graph(ti, learning_rate,
         pass
     else:
         raise BaseException("2 domains not supported simultaniously")
-
+     
+    ti_tgf = np.reshape(ti_tgf, (11, len_de_domain))
+    phi_tgf = egt_mat.dot(ti_tgf)
+    phi_tgf = np.log(phi_tgf)
+    tgf_min = np.min(phi_tgf)
+    tgf_max = np.max(phi_tgf)
+    r = tgf_max - tgf_min
+    phi_tgf = (phi_tgf - tgf_min) / r
+    phi_tgf = np.reshape(phi_tgf, (np.shape(fg.phi_en_de)[0],))
+    fg.phi_en_de[:,-3] = phi_tgf
+    print 'here6'
+   
     if options.history:
         history_feature = np.zeros((len_en_domain, len_de_domain))
         history_feature.astype(DTYPE)
@@ -282,7 +277,7 @@ def create_factor_graph(ti, learning_rate,
     return fg
 
 
-def batch_predictions(training_instance,
+def batch_predictions(training_instance,ti_tgf,
                       theta_en_en_names, theta_en_de_names,
                       theta_en_en, theta_en_de,
                       phi_wapper, lr,
@@ -292,6 +287,7 @@ def batch_predictions(training_instance,
     sent_id = ti.current_sent[0].sent_id
 
     fg = create_factor_graph(ti=ti,
+                             ti_tgf=ti_tgf,
                              learning_rate=lr,
                              theta_en_en_names=theta_en_en_names,
                              theta_en_de_names=theta_en_de_names,
@@ -322,7 +318,7 @@ def batch_prediction_probs_accumulate(result):
     sys.stderr.write('*')
 
 
-def batch_sgd(training_instance,
+def batch_sgd(training_instance,ti_tgf,
               theta_en_en_names, theta_en_de_names,
               theta_en_en, theta_en_de,
               phi_wrapper, lr,
@@ -332,6 +328,7 @@ def batch_sgd(training_instance,
     sent_id = ti.current_sent[0].sent_id
 
     fg = create_factor_graph(ti=ti,
+                             ti_tgf=ti_tgf,
                              learning_rate=lr,
                              theta_en_en_names=theta_en_en_names,
                              theta_en_de_names=theta_en_de_names,
@@ -392,12 +389,30 @@ def batch_sgd_accumulate(result):
         lock.release()
         # print 'received', result[0], f_en_en_theta, f_en_de_theta
 
+def error_msg():
+    sys.stderr.write(
+        'Usage: python real_phi_test.py\n\
+                --ti [training instance file]\n \
+                --end [en domain file]\n \
+                --ded [de domain file]\n \
+                --phi_pmi [pmi file]\n \
+                --phi_pmi_w1 [pmi w1 file]\n \
+                --phi_ed [ed file]\n \
+                --phi_ped [ped file]\n \
+                --phi_len [length file]\n \
+                --egt [eng given tag matrix]\n \
+                --cpu [4 by default]\n \
+                --save_params [save params to this file] or \n \
+                --load_params [load params from this file]] --save_predictions [save predictions to file]\n')
+
+
 
 if __name__ == '__main__':
     random.seed(1234)
     opt = OptionParser()
     # insert options here
     opt.add_option('--ti', dest='training_instances', default='')
+    opt.add_option('--ti_tgf', dest='ti_observed_tgf', default='')
     opt.add_option('--end', dest='en_domain', default='')
     opt.add_option('--ded', dest='de_domain', default='')
     opt.add_option('--phi_pmi', dest='phi_pmi', default='')
@@ -405,6 +420,7 @@ if __name__ == '__main__':
     opt.add_option('--phi_ed', dest='phi_ed', default='')
     opt.add_option('--phi_ped', dest='phi_ped', default='')
     opt.add_option('--phi_len', dest='phi_len', default='')
+    opt.add_option('--egt', dest='egt', default='')
     opt.add_option('--cpu', dest='cpus', default='')
     opt.add_option('--save_params', dest='save_params_file', default='')
     opt.add_option('--load_params', dest='load_params_file', default='')
@@ -417,7 +433,7 @@ if __name__ == '__main__':
 
     (options, _) = opt.parse_args()
 
-    if options.training_instances == '' or options.en_domain == '' or options.de_domain == '' or options.phi_pmi_w1 == '' or options.phi_pmi == '' or options.phi_ed == '' or options.phi_ped == '' or options.phi_len == '':
+    if options.training_instances == '' or options.en_domain == '' or options.de_domain == '' or options.phi_pmi_w1 == '' or options.phi_pmi == '' or options.phi_ed == '' or options.phi_ped == '' or options.phi_len == '' or options.egt == '':
         error_msg()
         exit(1)
     elif options.save_params_file == '' and options.load_params_file == '' and options.save_predictions_file == '':
@@ -455,7 +471,7 @@ if __name__ == '__main__':
     if mode == 'training':
         f_en_en_names = ['pmi', 'pmi_w1']
         f_en_en_theta = np.zeros((1, len(f_en_en_names)))
-        f_en_de_names = ['ed', 'ped', 'length', 'full_history', 'hit_history']
+        f_en_de_names = ['ed', 'ped', 'length','wordfreq', 'full_history', 'hit_history']
         f_en_de_theta = np.zeros((1, len(f_en_de_names)))
         domain2theta = {}
         for d in domains:
@@ -474,6 +490,15 @@ if __name__ == '__main__':
 
     print 'reading in  ti and domains...'
     training_instances = codecs.open(options.training_instances).readlines()
+
+    print 'reading in  ti observed freq...'
+    training_instances_observed_tf = np.loadtxt(options.ti_observed_tgf)
+    print training_instances_observed_tf.shape
+    training_instances_with_tf = []
+    print 'combining ti and tgf...'
+    for ti_idx, ti in enumerate(training_instances):
+        training_instances_with_tf.append((ti, training_instances_observed_tf[ti_idx, :]))
+
 
     de_domain = [i.strip() for i in codecs.open(options.de_domain, 'r', 'utf8').readlines()]
     en_domain = [i.strip() for i in codecs.open(options.en_domain, 'r', 'utf8').readlines()]
@@ -499,12 +524,15 @@ if __name__ == '__main__':
     phi_en_de2 = np.loadtxt(options.phi_ped)
     phi_en_de2 = np.reshape(phi_en_de2, (len(en_domain) * len(de_domain), 1))
 
+    print 'reading phi len'
     phi_en_de_len = np.loadtxt(options.phi_len)
     phi_en_de_len = np.reshape(phi_en_de_len, (len(en_domain) * len(de_domain),1))
-
+    print 'reading egt..'
+    egt_mat = np.loadtxt(options.egt)
+    phi_en_de_tf = np.zeros_like(phi_en_de1)  # place holder for term frequency
     phi_en_de3 = np.zeros_like(phi_en_de1)  # place holder for history
     phi_en_de4 = np.zeros_like(phi_en_de1)  # place holder for incorrect history
-    phi_en_de = np.concatenate((phi_en_de1, phi_en_de2, phi_en_de_len, phi_en_de3, phi_en_de4), axis=1)
+    phi_en_de = np.concatenate((phi_en_de1, phi_en_de2, phi_en_de_len, phi_en_de_tf, phi_en_de3, phi_en_de4), axis=1)
     phi_en_de.astype(DTYPE)
 
     phi_wrapper = PhiWrapper(phi_en_en, phi_en_en_w1, phi_en_de)
@@ -518,11 +546,11 @@ if __name__ == '__main__':
             print 'epoch:', epoch
             print f_en_en_names, f_en_en_theta
             print f_en_de_names, f_en_de_theta
-            random.shuffle(training_instances)
+            random.shuffle(training_instances_with_tf)
             pool = Pool(processes=cpu_count)
-            for ti in training_instances:
+            for ti,ti_tgf in training_instances_with_tf:
                 pool.apply_async(batch_sgd, args=(
-                    ti,
+                    ti,ti_tgf,
                     f_en_en_names,
                     f_en_de_names,
                     f_en_en_theta,
@@ -558,8 +586,8 @@ if __name__ == '__main__':
         ext = '.user_adapt' if options.user_adapt else ('.exp_adapt' if options.experience_adapt else '')
         final_writer = codecs.open(save_predictions_file + ext, 'w', 'utf8')
         final_dist_writer = codecs.open(save_predictions_file + ext + '.dist', 'w', 'utf8')
-        for ti in training_instances:
-            p, fgs, factor_dist = batch_predictions(ti,
+        for ti,ti_tgf in training_instances_with_tf:
+            p, fgs, factor_dist = batch_predictions(ti,ti_tgf,
                                                     f_en_en_names,
                                                     f_en_de_names,
                                                     f_en_en_theta,
