@@ -9,7 +9,7 @@ from optparse import OptionParser
 from LBP import FactorNode, FactorGraph, VariableNode, VAR_TYPE_PREDICTED, PotentialTable, VAR_TYPE_GIVEN
 from time import ctime
 import codecs
-from numpy import float32 as DTYPE
+from numpy import float64 as DTYPE
 from multiprocessing import Pool, Lock
 from array_utils import PhiWrapper
 
@@ -19,7 +19,7 @@ global options
 global domain2theta
 n_up = 0
 lock = Lock()
-np.seterr(divide='raise', over='raise', under='ignore')
+np.seterr(divide='warn', over='raise', under='ignore')
 
 np.set_printoptions(precision=4, suppress=True)
 
@@ -164,18 +164,21 @@ def create_factor_graph(ti,ti_tgf, learning_rate,
         pass
     else:
         raise BaseException("2 domains not supported simultaniously")
-     
-    ti_tgf = np.reshape(ti_tgf, (11, len_de_domain))
-    phi_tgf = egt_mat.dot(ti_tgf)
-    phi_tgf = np.log(phi_tgf)
-    tgf_min = np.min(phi_tgf)
-    tgf_max = np.max(phi_tgf)
-    r = tgf_max - tgf_min
-    phi_tgf = (phi_tgf - tgf_min) / r
-    phi_tgf = np.reshape(phi_tgf, (np.shape(fg.phi_en_de)[0],))
-    fg.phi_en_de[:,-3] = phi_tgf
-    print 'here6'
-   
+
+    if np.sum(ti_tgf) > 0.0:  
+        ti_tgf = np.reshape(ti_tgf, (11, len_de_domain))
+        phi_tgf = egt_mat.dot(ti_tgf)
+        phi_tgf = np.log(phi_tgf)
+        tgf_min = np.min(phi_tgf)
+        tgf_max = np.max(phi_tgf)
+        print tgf_min, tgf_max
+        r = tgf_max - tgf_min
+        phi_tgf = (phi_tgf - tgf_min) / r
+        phi_tgf = np.reshape(phi_tgf, (np.shape(fg.phi_en_de)[0],))
+        fg.phi_en_de[:,-3] = phi_tgf
+    else:
+        pass
+    
     if options.history:
         history_feature = np.zeros((len_en_domain, len_de_domain))
         history_feature.astype(DTYPE)
