@@ -1,7 +1,7 @@
 __author__ = 'arenduchintala'
 import sys
 import numpy as np
-from numpy import float32 as DTYPE
+from numpy import float64 as DTYPE
 import random
 import array_utils as au
 from scipy import sparse
@@ -41,7 +41,7 @@ class FactorGraph():
         self.messages = {}
         self.normalize_messages = True
         self.isLoopy = None
-        self.regularization_param = 0.1
+        self.regularization_param = 0.01
         self.learning_rate = 0.1
         self.cg_times = []
         self.exp_cg_times = []
@@ -80,7 +80,12 @@ class FactorGraph():
                 truth = v.truth_label if v.truth_label is not None else 'None'
                 guess = v.supervised_label if v.supervised_label is not None else 'None'
                 m = v.get_marginal()
-                i = ' '.join(['%0.4f' % i for i in np.log(m.m)])
+                #print 'here!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!'
+                #print m.m
+                #print np.sum(m.m)
+                #print m.m.shape
+                #i = ' '.join(['%0.4f' % i for i in np.log(m.m)])
+                i = ' '.join(['%0.6f' % i for i in np.log(m.m)])
                 d = ' ||| '.join([truth, guess, i])
                 factor_dist.append(d)
         factor_dist = '\n'.join(factor_dist)
@@ -186,7 +191,12 @@ class FactorGraph():
         log_posterior = 0.0
         for v_key, v in self.variables.iteritems():
             m = v.get_marginal()
-            log_posterior += np.sum(np.log(m.m[v.supervised_label_index]))
+            #print v.supervised_label_index
+            #print 'HERE!!!!!!!!!!!!!!!!!!!!!!!!!!'
+            #print m.m[v.supervised_label_index], 'is the label prob', np.sum(m.m), 'is the sum...'
+            _l = np.log(m.m[v.supervised_label_index])
+            #_l = -999999.9 if _l == float('-inf') else _l
+            log_posterior += np.sum(_l)
         return log_posterior
 
     def get_max_postior_label(self, top=10):
@@ -507,6 +517,7 @@ class FactorNode():
                 #    print 'c not uniform...'
         return beliefs
 
+    '''
     def get_observed_factor(self):
         # of = np.zeros_like(self.potential_table.table)
         cell = sorted([(self.potential_table.var_id2dim[v.id], v.supervised_label_index) for v in self.varset])
@@ -514,6 +525,14 @@ class FactorNode():
         # print 'cell', cell, self.potential_table.table.shape
         # of[cell] = 1.0
         return [cell]
+    '''
+    def get_observed_factor(self):
+        of = np.zeros_like(self.potential_table.table)
+        cell = sorted([(self.potential_table.var_id2dim[v.id], v.supervised_label_index) for v in self.varset])
+        cell = tuple([o for d, o in cell])
+        of[cell] = 1.0
+        return of
+
 
     def get_gradient(self):
         cg = time.time()
@@ -542,6 +561,12 @@ class FactorNode():
         return grad1
 
     def cell_gradient(self):
+        obs_counts = self.get_observed_factor()
+        exp_counts = self.get_factor_beliefs()  # this is the same because I assume binary features  values at the "cell level"
+        return obs_counts - exp_counts
+
+    '''
+    def cell_gradient(self):
         obs_cg = time.time()
         cell = self.get_observed_factor()
         self.graph.obs_cg_times.append(time.time() - obs_cg)
@@ -549,14 +574,13 @@ class FactorNode():
         exp_counts = self.get_factor_beliefs()  # this is the same because I assume binary features  values at the "cell level"
         self.graph.exp_cg_times.append(time.time() - exp_cg)
         diff_cg = time.time()
-        d = exp_counts
+        d = -exp_counts
         assert len(cell) == 1
         for c in cell:
-            d[c] = 1.0 - d[c]
-        # d[cell] = 1.0 - d[cell]
+            d[c] = 1.0 +  d[c]
         self.graph.diff_cg_times.append(time.time() - diff_cg)
         return d
-
+    '''
 
 class ObservedFactor(FactorNode):
     def __init__(self, id, observed_domain_type, observed_value):
