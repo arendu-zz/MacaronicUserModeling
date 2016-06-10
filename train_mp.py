@@ -292,7 +292,7 @@ def batch_predictions(training_instance,ti_tgf,
                       theta_en_en_names, theta_en_de_names,
                       theta_en_en, theta_en_de,
                       phi_wapper, lr,
-                      en_domain, de2id, en2id, d2t):
+                      en_domain, de2id, en2id, d2t, qp=False):
     j_ti = json.loads(training_instance)
     ti = TrainingInstance.from_dict(j_ti)
     sent_id = ti.current_sent[0].sent_id
@@ -312,12 +312,16 @@ def batch_predictions(training_instance,ti_tgf,
     fg.initialize()
     fg.treelike_inference(3)
     p = fg.get_posterior_probs()
-    fgs = '\n'.join(['*SENT_ID:' + str(sent_id)] + fg.to_string())
+    if qp:
+        factor_dist = None
+        fgs = None
+    else:
+        fgs = '\n'.join(['*SENT_ID:' + str(sent_id)] + fg.to_string())
+        factor_dist = fg.to_dist()
     try:
         p0,p25, p50, t = fg.get_precision_counts()
     except Exception as err:
         print str(err)
-    factor_dist = fg.to_dist()
     return [p, fgs, factor_dist, (p0, p25, p50,t)]
 
 
@@ -331,9 +335,9 @@ def batch_prediction_probs_accumulate(result):
     prec_at_50 += result[3][2]
     prec_totals += result[3][3]
     if prediction_str is not None:
-        prediction_str = prediction_str + fgs + '\n'
+        prediction_str = prediction_str + (fgs if fgs is not None else 'none') + '\n'
     else:
-        prediction_str = fgs + '\n'
+        prediction_str = (fgs if fgs is not None else 'none') + '\n'
     n_up += 1
     sys.stderr.write('~')
 
@@ -448,7 +452,7 @@ if __name__ == '__main__':
     opt.add_option('--history', dest='history', default=False, action='store_true')
     opt.add_option('--session_history', dest='session_history', default=False, action='store_true')
     opt.add_option('--user_adapt', dest='user_adapt', default=False, action='store_true')
-    opt.add_option('--parallel_predict', dest='parallel_predict', default=False, action='store_true')
+    opt.add_option('--quick_predict', dest='quick_predict', default=False, action='store_true')
     opt.add_option('--use_approx_learning', dest='use_approx_learning', default=False, action='store_true')
     opt.add_option('--experience_adapt', dest='experience_adapt', default=False, action='store_true')
 
@@ -628,7 +632,7 @@ if __name__ == '__main__':
                                                             en_domain,
                                                             de2id,
                                                             en2id,
-                                                            domain2theta), callback=batch_prediction_probs_accumulate)
+                                                            domain2theta, True), callback=batch_prediction_probs_accumulate)
                     '''
                     p, fgs, factor_dist = batch_predictions(tune_ti,tune_ti_tgf,
                                                             f_en_en_names,
@@ -640,7 +644,7 @@ if __name__ == '__main__':
                                                             en_domain,
                                                             de2id,
                                                             en2id,
-                                                            domain2theta)
+                                                            domain2theta, True)
                     test_prediction_probs += p
                     '''
                 pool_tune.close()
@@ -655,7 +659,7 @@ if __name__ == '__main__':
         ext = '.user_adapt' if options.user_adapt else ('.exp_adapt' if options.experience_adapt else '')
         final_writer = codecs.open(options.save_params_file + ext, 'w', 'utf8')
         save_params(final_writer, f_en_en_theta, f_en_de_theta, f_en_en_names, f_en_de_names, domain2theta)
-    elif options.parallel_predict:
+    elif options.quick_predict:
         testing_instances_with_tf = training_instances_with_tf
         prediction_str = ''
         test_prediction_probs = 0.0
@@ -666,7 +670,7 @@ if __name__ == '__main__':
         prec_totals = 0
         pool_predict = Pool(processes=cpu_count)
         for test_ti,test_ti_tgf in testing_instances_with_tf:
-            pool_predict.apply_async(batch_predictions, args=(test_ti, test_ti_tgf,
+            p, fgs, factor_dist, prec_info = batch_predictions(test_ti, test_ti_tgf,
                                                     f_en_en_names,
                                                     f_en_de_names,
                                                     f_en_en_theta,
@@ -676,9 +680,13 @@ if __name__ == '__main__':
                                                     en_domain,
                                                     de2id,
                                                     en2id,
-                                                    domain2theta), callback=batch_prediction_probs_accumulate)
-        pool_predict.close()
-        pool_predict.join()
+                                                    domain2theta, True)
+            test_prediction_probs += p
+            prec_at_0 += prec_info[0]
+            prec_at_25  += prec_info[1]
+            prec_at_50  += prec_info[2]
+            prec_totals  += prec_info[3]
+            sys.stderr.write('~')
         print '\nparallel prediction probs:', test_prediction_probs/float(len(testing_instances_with_tf))
         print 'Prec at 0:','%0.2f' %  (float(100 * prec_at_0)/float(prec_totals)), 'total:', prec_totals
         print 'prec at 25:','%0.2f' % (float(100 * prec_at_25)/float(prec_totals)), 'total:', prec_totals
