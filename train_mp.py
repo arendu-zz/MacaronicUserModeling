@@ -27,7 +27,7 @@ prec_at_0 = 0
 prec_at_25 = 0
 prec_at_50 = 0
 prec_totals = 0
-np.seterr(divide='warn', over='raise', under='warn')
+np.seterr(divide='warn', over='warn',invalid='warn', under='warn')
 
 np.set_printoptions(precision=4, suppress=True)
 
@@ -448,6 +448,7 @@ if __name__ == '__main__':
     opt.add_option('--history', dest='history', default=False, action='store_true')
     opt.add_option('--session_history', dest='session_history', default=False, action='store_true')
     opt.add_option('--user_adapt', dest='user_adapt', default=False, action='store_true')
+    opt.add_option('--parallel_predict', dest='parallel_predict', default=False, action='store_true')
     opt.add_option('--use_approx_learning', dest='use_approx_learning', default=False, action='store_true')
     opt.add_option('--experience_adapt', dest='experience_adapt', default=False, action='store_true')
 
@@ -645,15 +646,44 @@ if __name__ == '__main__':
                 pool_tune.close()
                 pool_tune.join()
                 print '\ntune prediction probs:', test_prediction_probs/float(len(tuning_instances_with_tf))
-                print 'Prec at 0:','%0.2f' %  (float(100 * prec_at_0)/float(prec_totals))
-                print 'prec at 25:','%0.2f' % (float(100 * prec_at_25)/float(prec_totals))
-                print 'prec at 50:','%0.2f' % (float(100 * prec_at_50)/float(prec_totals))
+                print 'Prec at 0:','%0.2f' %  (float(100 * prec_at_0)/float(prec_totals)), 'total:', prec_totals
+                print 'prec at 25:','%0.2f' % (float(100 * prec_at_25)/float(prec_totals)), 'total:', prec_totals
+                print 'prec at 50:','%0.2f' % (float(100 * prec_at_50)/float(prec_totals)), 'total:', prec_totals
             else:
                 print 'no tuning instances...'
         print '\ntheta final:', f_en_en_theta, f_en_de_theta
         ext = '.user_adapt' if options.user_adapt else ('.exp_adapt' if options.experience_adapt else '')
         final_writer = codecs.open(options.save_params_file + ext, 'w', 'utf8')
         save_params(final_writer, f_en_en_theta, f_en_de_theta, f_en_en_names, f_en_de_names, domain2theta)
+    elif options.parallel_predict:
+        testing_instances_with_tf = training_instances_with_tf
+        prediction_str = ''
+        test_prediction_probs = 0.0
+        lr = None
+        prec_at_0 = 0
+        prec_at_25 = 0
+        prec_at_50 = 0
+        prec_totals = 0
+        pool_predict = Pool(processes=cpu_count)
+        for test_ti,test_ti_tgf in testing_instances_with_tf:
+            pool_predict.apply_async(batch_predictions, args=(test_ti, test_ti_tgf,
+                                                    f_en_en_names,
+                                                    f_en_de_names,
+                                                    f_en_en_theta,
+                                                    f_en_de_theta,
+                                                    phi_wrapper,
+                                                    lr,
+                                                    en_domain,
+                                                    de2id,
+                                                    en2id,
+                                                    domain2theta), callback=batch_prediction_probs_accumulate)
+        pool_predict.close()
+        pool_predict.join()
+        print '\nparallel prediction probs:', test_prediction_probs/float(len(testing_instances_with_tf))
+        print 'Prec at 0:','%0.2f' %  (float(100 * prec_at_0)/float(prec_totals)), 'total:', prec_totals
+        print 'prec at 25:','%0.2f' % (float(100 * prec_at_25)/float(prec_totals)), 'total:', prec_totals
+        print 'prec at 50:','%0.2f' % (float(100 * prec_at_50)/float(prec_totals)), 'total:', prec_totals
+        pass
     else:
         print 'predicting...'
         print f_en_en_names, f_en_en_theta

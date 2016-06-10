@@ -1,11 +1,12 @@
 __author__ = 'arenduchintala'
 import numpy as np
+import warnings
 import time
 import itertools
 from scipy import sparse
 from numpy import float32 as DTYPE
 
-np.set_printoptions(linewidth=300, precision=2)
+np.set_printoptions(linewidth=300, precision=12)
 
 
 class PhiWrapper(object):
@@ -24,9 +25,11 @@ class ThetaWrapper(object):
 
 
 def pointwise_multiply(m1, m2):
-    return np.multiply(m1, m2)
-
-
+    #lm1 = np.log(m1)
+    #lm2 = np.log(m2)
+    #return np.exp(lm1 + lm2)
+     return np.multiply(m1, m2)
+    
 def clip(m1):
     m1[m1 < 1.0e-100] = 0.0  # we dont have to worry about these being negative...
     return m1
