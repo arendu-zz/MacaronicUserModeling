@@ -43,6 +43,7 @@ class FactorGraph():
         self.isLoopy = None
         self.regularization_param = 0.01
         self.learning_rate = 0.1
+        self.measure_time = False
         self.cg_times = []
         self.exp_cg_times = []
         self.obs_cg_times = []
@@ -56,6 +57,35 @@ class FactorGraph():
         if isinstance(self.theta_en_de_names, tuple):
             self.theta_en_de_names = self.theta_en_de_names[0]
 
+    def get_precision_counts(self):
+        p_at_0 = 0
+        p_at_25 = 0
+        p_at_50 = 0
+        totals = 0
+        for f in self.factors:
+            if f.factor_type == 'en_de':
+                sl, slp, prediction = f.varset[0].get_max_vocab(50)
+                totals +=1
+                for rank, (p_label, p_prob) in enumerate(prediction):
+                    if sl == p_label:
+                        if rank == 0:
+                            p_at_0 +=1
+                            p_at_25 +=1
+                            p_at_50 +=1
+                        elif rank < 26:
+                            p_at_25 +=1
+                            p_at_50 +=1
+                        elif rank < 51:
+                            p_at_50 += 1
+                        else:
+                            pass
+                    else:
+                        pass
+            else:
+                pass
+        return p_at_0, p_at_25, p_at_50, totals
+
+
     def to_string(self):
         position_factors = sorted([(f.position, f) for f in self.factors if f.position is not None])
         fg_dct = {}
@@ -63,6 +93,7 @@ class FactorGraph():
             if f.factor_type == 'en_de':
                 de_label = f.word_label
                 sl, slp, pred = f.varset[0].get_max_vocab(50)
+                
                 pred = ' '.join([p1 + ' ' + p2 for p1, p2 in pred])
                 fg_dct[p] = ' '.join([de_label, sl, slp, pred])
             if f.factor_type == 'en_en':
@@ -178,25 +209,29 @@ class FactorGraph():
                     pass
                 else:
                     # print 'send msg', str(frm), '->', str(to)
+                    #sys.stderr.write('0-')
                     frm.update_message_to(to)
+                    #sys.stderr.write('-0')
             # print 'root to leaves...', str(_root)
             for to, frm in _schedule:
                 if isinstance(to, FactorNode) and len(to.varset) < 2:
                     pass
                 else:
                     # print 'send msg', str(frm), '->', str(to)
+                    #sys.stderr.write('1-')
                     frm.update_message_to(to)
+                    #sys.stderr.write('-1')
 
     def get_posterior_probs(self):
         log_posterior = 0.0
         for v_key, v in self.variables.iteritems():
             m = v.get_marginal()
-            #print v.supervised_label_index
-            #print 'HERE!!!!!!!!!!!!!!!!!!!!!!!!!!'
-            #print m.m[v.supervised_label_index], 'is the label prob', np.sum(m.m), 'is the sum...'
             _l = np.log(m.m[v.supervised_label_index])
-            #_l = -999999.9 if _l == float('-inf') else _l
-            log_posterior += np.sum(_l)
+            if _l == float('-inf'):
+                sys.stderr.write('err -inf' + str( m.m[v.supervised_label_index]))
+                log_posterior += -99.99
+            else:
+                log_posterior += np.sum(_l)
         return log_posterior
 
     def get_max_postior_label(self, top=10):
@@ -240,8 +275,8 @@ class FactorGraph():
         return grad_en_de, grad_en_en
 
     def get_unregularized_gradeint(self):
-        grad_en_de = np.zeros_like(self.theta_en_de)
-        grad_en_en = np.zeros_like(self.theta_en_en)
+        grad_en_de = np.zeros_like(self.theta_en_de, dtype=DTYPE)
+        grad_en_en = np.zeros_like(self.theta_en_en, dtype=DTYPE)
         for f in self.factors:
             if f.factor_type == 'en_en':
                 gr = f.get_gradient()
@@ -317,6 +352,7 @@ class VariableNode():
     def update_message_to(self, fc):
         if __debug__: assert isinstance(fc, FactorNode)
         if __debug__: assert fc in self.facset
+        #sys.stderr.write('~')
         new_m = Message.new_message(self.domain, 1.0 / len(self.domain))
         for other_fc in self.facset:
             if other_fc is not fc:
@@ -360,6 +396,7 @@ class FactorNode():
         self.position = None
         self.word_label = None
         self.gap = None
+        self.connect_type = None
 
     def __str__(self):
         return 'F_' + str(self.id)
@@ -527,7 +564,7 @@ class FactorNode():
         return [cell]
     '''
     def get_observed_factor(self):
-        of = np.zeros_like(self.potential_table.table)
+        of = np.zeros_like(self.potential_table.table, dtype=DTYPE)
         cell = sorted([(self.potential_table.var_id2dim[v.id], v.supervised_label_index) for v in self.varset])
         cell = tuple([o for d, o in cell])
         of[cell] = 1.0
@@ -535,19 +572,19 @@ class FactorNode():
 
 
     def get_gradient(self):
-        cg = time.time()
+        if self.graph.measure_time: cg = time.time()
         g = self.cell_gradient()
-        self.graph.cg_times.append(time.time() - cg)
-        sgg = time.time()
+        if self.graph.measure_time: self.graph.cg_times.append(time.time() - cg)
+        if self.graph.measure_time: sgg = time.time()
         if self.potential_table.observed_dim is not None:
-            sparse_g = np.zeros(self.get_shape())
+            sparse_g = np.zeros(self.get_shape(), dtype=DTYPE)
             g = np.reshape(g, (np.size(g),))
             sparse_g[:, self.potential_table.observed_dim] = g
             g = sparse_g
         else:
             # g is already  a matrix
             pass
-        self.graph.sgg_times.append(time.time() - sgg)
+        if self.graph.measure_time: self.graph.sgg_times.append(time.time() - sgg)
         f_ij = np.reshape(g, (np.size(g), 1))
         gg = time.time()
         # print 'nz appx, orig, full :', np.count_nonzero(f_ij_approx), np.count_nonzero(f_ij), np.size(f_ij)
@@ -557,7 +594,7 @@ class FactorNode():
         # grad_approx = au.induce_s_mutliply_clip(f_ij, self.get_phi().T, k=1000)
         # grad1 = grad_approx.T
         # if __debug__: assert  np.allclose(grad1, grad2.T)
-        self.graph.gg_times.append(time.time() - gg)
+        if self.graph.measure_time: self.graph.gg_times.append(time.time() - gg)
         return grad1
 
     def cell_gradient(self):
@@ -617,7 +654,8 @@ class Message():
     def new_message(domain, init):
         m = np.empty((len(domain), 1))
         m.fill(init)
-        m.astype(DTYPE)
+        if m.dtype != DTYPE:
+            m = m.astype(DTYPE)
         return Message(m)
 
 
@@ -639,7 +677,8 @@ class PotentialTable():
             else:
                 self.var_id2dim = v_id2dim
                 self.table = table
-            self.table.astype(DTYPE)
+            if self.table.dtype != DTYPE:
+                self.table = self.table.astype(DTYPE)
             if len(np.shape(self.table)) > 1:
                 if __debug__: assert np.shape(self.table)[0] == np.shape(self.table)[1] or np.shape(self.table)[1] == 1
         else:
@@ -656,7 +695,8 @@ class PotentialTable():
         else:
             pass
         self.table = table
-        self.table.astype(DTYPE)
+        if self.table.dtype != DTYPE:
+            self.table = self.table.astype(DTYPE)
         if len(np.shape(self.table)) > 1:
             if __debug__: assert np.shape(self.table)[0] == np.shape(self.table)[1] or np.shape(self.table)[1] == 1
 
