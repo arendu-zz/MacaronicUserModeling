@@ -19,6 +19,7 @@ global options
 global domain2theta
 global prec_at_0, prec_at_25, prec_at_50, prec_totals
 global PRED2GIVEN, PRED2PRED
+global N
 PRED2GIVEN = 'pred2given'
 PRED2PRED = 'pred2pred'
 n_up = 0
@@ -134,7 +135,7 @@ def get_var_node_pair(sorted_current_sent, current_guesses, current_revealed, en
     return var_node_pairs
 
 
-def create_factor_graph(ti,ti_tgf, learning_rate,
+def create_factor_graph(ti, learning_rate,
                         theta_en_en_names, theta_en_de_names,
                         theta_en_en, theta_en_de,
                         phi_wrapper,
@@ -157,13 +158,13 @@ def create_factor_graph(ti,ti_tgf, learning_rate,
 
     fg.learning_rate = learning_rate
     fg.use_approx_learning = options.use_approx_learning
-    fg.regularization_param = float(options.reg_param) 
+    fg.regularization_param = float(options.reg_param) / float(N) 
 
     if options.user_adapt:
         d = ti.user_id
         fg.active_domains['en_en', d] = 1
         fg.active_domains['en_de', d] = 1
-        sys.stderr.write('+')
+        ys.stderr.write('+')
     elif options.experience_adapt:
         d = len(ti.past_sentences_seen)
         fg.active_domains['en_en', d] = 1
@@ -174,19 +175,13 @@ def create_factor_graph(ti,ti_tgf, learning_rate,
     else:
         raise BaseException("2 domains not supported simultaniously")
 
-    if np.sum(ti_tgf) > 0.0:  
-        ti_tgf = np.reshape(ti_tgf, (11, len_de_domain))
-        phi_tgf = egt_mat.dot(ti_tgf)
-        phi_tgf = np.log(phi_tgf)
-        tgf_min = np.min(phi_tgf)
-        tgf_max = np.max(phi_tgf)
-        r = tgf_max - tgf_min
-        phi_tgf = (phi_tgf - tgf_min) / r
-        phi_tgf = np.reshape(phi_tgf, (np.shape(fg.phi_en_de)[0],))
-        fg.phi_en_de[:,-3] = phi_tgf
-    else:
-        pass
-    
+    if options.use_correct_feat:
+        correct_feat = np.zeros((len_en_domain, len_de_domain), dtype=DTYPE)
+        sys.stderr.write(str(len(ti.current_guesses)))
+        for cg in ti.current_guesses:
+            sys.stderr.write(str(cg) + ','+ str(cg.guess == cg.l2_word) + "\n")
+            
+
     if options.history:
         history_feature = np.zeros((len_en_domain, len_de_domain), dtype=DTYPE)
         for pg in ti.past_correct_guesses:
@@ -197,6 +192,9 @@ def create_factor_graph(ti,ti_tgf, learning_rate,
             history_feature[i, j] += 1.00
         history_feature = np.reshape(history_feature, (np.shape(fg.phi_en_de)[0],))
         fg.phi_en_de[:, -2] = history_feature
+    else:
+        pass
+
     if options.session_history:
         incorrect_history = np.zeros((len_en_domain, len_de_domain), dtype=DTYPE)
         for ig in ti.past_guesses_for_current_sent:
@@ -288,7 +286,7 @@ def create_factor_graph(ti,ti_tgf, learning_rate,
     return fg
 
 
-def batch_predictions(training_instance,ti_tgf,
+def batch_predictions(training_instance,
                       theta_en_en_names, theta_en_de_names,
                       theta_en_en, theta_en_de,
                       phi_wapper, lr,
@@ -298,7 +296,6 @@ def batch_predictions(training_instance,ti_tgf,
     sent_id = ti.current_sent[0].sent_id
 
     fg = create_factor_graph(ti=ti,
-                             ti_tgf=ti_tgf,
                              learning_rate=lr,
                              theta_en_en_names=theta_en_en_names,
                              theta_en_de_names=theta_en_de_names,
@@ -342,7 +339,7 @@ def batch_prediction_probs_accumulate(result):
     sys.stderr.write('~')
 
 
-def batch_sgd(training_instance,ti_tgf,
+def batch_sgd(training_instance,
               theta_en_en_names, theta_en_de_names,
               theta_en_en, theta_en_de,
               phi_wrapper, lr,
@@ -351,7 +348,6 @@ def batch_sgd(training_instance,ti_tgf,
     ti = TrainingInstance.from_dict(j_ti)
     sent_id = ti.current_sent[0].sent_id
     fg = create_factor_graph(ti=ti,
-                             ti_tgf=ti_tgf,
                              learning_rate=lr,
                              theta_en_en_names=theta_en_en_names,
                              theta_en_de_names=theta_en_de_names,
@@ -364,7 +360,7 @@ def batch_sgd(training_instance,ti_tgf,
                              d2t=d2t)
     fg.initialize()
     fg.treelike_inference(3)
-    # sys.stderr.write('.')
+    sys.stderr.write('.')
     # f_en_en_theta, f_en_de_theta = fg.update_theta()
     # sys.stderr.write('|')
     if options.user_adapt or options.experience_adapt:
@@ -375,14 +371,14 @@ def batch_sgd(training_instance,ti_tgf,
             t = domain2theta[f_type, d]
             r = fg.regularization_param
             l = fg.learning_rate
-            scale_reg = 1
+            scale_reg = float(options.reg_param_ua_scale)
             sample_ag[f_type, d] = apply_regularization(r * scale_reg, g, l, t)  # use a smaller regularization term
         g_en_en = apply_regularization(r, g_en_en, l, fg.theta_en_en)
         g_en_de = apply_regularization(r, g_en_de, l, fg.theta_en_de)
     else:
         sample_ag = None
         g_en_en, g_en_de = fg.return_gradient()
-    # sys.stderr.write('+')
+    sys.stderr.write('+')
     p  = fg.get_posterior_probs()
 
     return [sent_id, p, g_en_en, g_en_de, sample_ag]
@@ -435,7 +431,6 @@ if __name__ == '__main__':
     # insert options here
     opt.add_option('--ti', dest='training_instances', default='')
     opt.add_option('--tune', dest='tuning_instances' , default='')
-    opt.add_option('--ti_tgf', dest='ti_observed_tgf', default='')
     opt.add_option('--end', dest='en_domain', default='')
     opt.add_option('--ded', dest='de_domain', default='')
     opt.add_option('--phi_pmi', dest='phi_pmi', default='')
@@ -445,7 +440,8 @@ if __name__ == '__main__':
     opt.add_option('--phi_len', dest='phi_len', default='')
     opt.add_option('--egt', dest='egt', default='')
     opt.add_option('--cpu', dest='cpus', default='')
-    opt.add_option('--reg_param', dest='reg_param', default='0.01')
+    opt.add_option('--reg_param', dest='reg_param', default='0.2')
+    opt.add_option('--reg_param_ua_scale', dest='reg_param_ua_scale', default='1.0')
     opt.add_option('--save_params', dest='save_params_file', default='')
     opt.add_option('--load_params', dest='load_params_file', default='')
     opt.add_option('--save_predictions', dest='save_predictions_file', default='')
@@ -455,6 +451,8 @@ if __name__ == '__main__':
     opt.add_option('--quick_predict', dest='quick_predict', default=False, action='store_true')
     opt.add_option('--use_approx_learning', dest='use_approx_learning', default=False, action='store_true')
     opt.add_option('--experience_adapt', dest='experience_adapt', default=False, action='store_true')
+    opt.add_option('--use_correct_feat', dest='use_correct_feat', default=True, action='store_true')
+    opt.add_option('--use_correct_feat_per_l2_word', dest='use_correct_feat_per_l2_word', default=False, action='store_true')
 
     (options, _) = opt.parse_args()
 
@@ -468,12 +466,16 @@ if __name__ == '__main__':
         pass
 
     print 'user adapt:', options.user_adapt
-    print 'experienence adapt:', options.experience_adapt
-    print 'use_approx_learning:', options.use_approx_learning
+    print 'use experience adapt:', options.experience_adapt
+    print 'use approx learning:', options.use_approx_learning
+    print 'use history', options.history
+    print 'use correct', options.use_correct_feat
+    print 'use correct per l2 word', options.use_correct_feat_per_l2_word
 
     cpu_count = 4 if options.cpus.strip() == '' else int(options.cpus)
     print 'cpu count:', cpu_count
     print 'reg param:', options.reg_param
+    print 'reg param ua scale:', options.reg_param_ua_scale
 
 
     domains = []
@@ -494,20 +496,42 @@ if __name__ == '__main__':
             sys.stderr.write("experience_adapt option can not find .experience file.")
             exit(1)
 
-    mode = 'training' if options.load_params_file == '' else 'predicting'
-    if mode == 'training':
+    mode = 'training' if options.save_predictions_file == '' else 'predicting'
+    if mode == 'training' and options.load_params_file == '':
+        print 'training from zero params'
         f_en_en_names = ['pmi', 'pmi_w1']
         f_en_en_theta = np.zeros((1, len(f_en_en_names)), dtype=DTYPE)
-        f_en_de_names = ['ed', 'ped', 'length','wordfreq', 'full_history', 'hit_history']
+        #f_en_de_names = ['ed', 'ped', 'length','wordfreq', 'full_history', 'hit_history'] #removed length and word freq
+        f_en_de_names = ['ed', 'ped','correct', 'incorrect', 'full_history', 'hit_history']
         f_en_de_theta = np.zeros((1, len(f_en_de_names)), dtype=DTYPE)
         domain2theta = {}
         for d in domains:
             domain2theta['en_en', d] = f_en_en_theta.copy()
             domain2theta['en_de', d] = f_en_de_theta.copy()
+    elif mode == 'training' and options.load_params_file != '':
+        ext = '.user_adapt' if options.user_adapt else ('.exp_adapt' if options.experience_adapt else '')
+        print 'training from loaded  params'
+        try:
+            print 'trying to read:', options.load_params_file + ext
+            een, eet, edn, edt, d2t = read_params(options.load_params_file + ext)
+        except IOError as err:
+            print 'trying no extension'
+            print 'trying to read:', options.load_params_file
+            een, eet, edn, edt, d2t = read_params(options.load_params_file + ext)
+        f_en_en_names = een
+        f_en_en_theta = eet
+        f_en_de_names = edn
+        f_en_de_theta = edt
+        domain2theta = d2t
     else:
         ext = '.user_adapt' if options.user_adapt else ('.exp_adapt' if options.experience_adapt else '')
-        print 'trying to read', options.load_params_file + ext
-        een, eet, edn, edt, d2t = read_params(options.load_params_file + ext)
+        try:
+            print 'trying to read:', options.load_params_file + ext
+            een, eet, edn, edt, d2t = read_params(options.load_params_file + ext)
+        except IOError as err:
+            print 'trying no extension'
+            print 'trying to read:', options.load_params_file
+            een, eet, edn, edt, d2t = read_params(options.load_params_file + ext)
         save_predictions_file = options.save_predictions_file
         f_en_en_names = een
         f_en_en_theta = eet
@@ -523,22 +547,22 @@ if __name__ == '__main__':
     else:
         tuning_instances = codecs.open(options.tuning_instances).readlines()
 
-    print 'reading in  ti observed freq...'
-    training_instances_observed_tf = np.loadtxt(options.ti_observed_tgf, dtype=DTYPE)
-    print 'shape of ti_observed_tf:', training_instances_observed_tf.shape
+    #print 'reading in  ti observed freq...'
+    #training_instances_observed_tf = np.loadtxt(options.ti_observed_tgf, dtype=DTYPE)
+    #print 'shape of ti_observed_tf:', training_instances_observed_tf.shape
 
-    training_instances_with_tf = []
-    print 'combining ti and tgf...'
-    for ti_idx, ti in enumerate(training_instances):
-        training_instances_with_tf.append((ti, training_instances_observed_tf[ti_idx, :]))
+    #training_instances = []
+    #print 'combining ti and tgf...'
+    #for ti_idx, ti in enumerate(training_instances):
+    #    training_instances.append((ti, training_instances_observed_tf[ti_idx, :]))
 
     if tuning_instances is not None:
-        print 'combining tuning ti and tgf...'
-        #TODO: currently ignoring tgf for tuning... since we might just drop the feature...
-        tuning_instances_observed_tf = np.zeros((len(tuning_instances), training_instances_observed_tf.shape[1]), dtype=DTYPE)
-        tuning_instances_with_tf = []
-        for ti_idx, ti in enumerate(tuning_instances):
-            tuning_instances_with_tf.append((ti, tuning_instances_observed_tf[ti_idx, :]))
+        #print 'combining tuning ti and tgf...'
+        #tuning_instances_observed_tf = np.zeros((len(tuning_instances), training_instances_observed_tf.shape[1]), dtype=DTYPE)
+        #tuning_instances = []
+        #for ti_idx, ti in enumerate(tuning_instances):
+        #    tuning_instances.append((ti, tuning_instances_observed_tf[ti_idx, :]))
+        pass
     else:
         print 'skipping tuning instances with tf combination...'
 
@@ -567,15 +591,13 @@ if __name__ == '__main__':
     phi_en_de2 = np.loadtxt(options.phi_ped, dtype=DTYPE)
     phi_en_de2 = np.reshape(phi_en_de2, (len(en_domain) * len(de_domain), 1))
 
-    print 'reading phi len'
-    phi_en_de_len = np.loadtxt(options.phi_len, dtype=DTYPE)
-    phi_en_de_len = np.reshape(phi_en_de_len, (len(en_domain) * len(de_domain),1))
-    print 'reading egt..'
-    egt_mat = np.loadtxt(options.egt, dtype=DTYPE)
-    phi_en_de_tf = np.zeros_like(phi_en_de1)  # place holder for term frequency
-    phi_en_de3 = np.zeros_like(phi_en_de1)  # place holder for history
-    phi_en_de4 = np.zeros_like(phi_en_de1)  # place holder for incorrect history
-    phi_en_de = np.concatenate((phi_en_de1, phi_en_de2, phi_en_de_len, phi_en_de_tf, phi_en_de3, phi_en_de4), axis=1)
+    #print 'reading egt..'
+    #egt_mat = np.loadtxt(options.egt, dtype=DTYPE)
+    phi_en_de3 = np.zeros_like(phi_en_de1)  # place holder for correct
+    phi_en_de4 = np.zeros_like(phi_en_de1)  # place holder for incorrect
+    phi_en_de5 = np.zeros_like(phi_en_de1)  # place holder for history
+    phi_en_de6 = np.zeros_like(phi_en_de1)  # place holder for incorrect history
+    phi_en_de = np.concatenate((phi_en_de1, phi_en_de2, phi_en_de3, phi_en_de4, phi_en_de5, phi_en_de6), axis=1)
     phi_en_de = phi_en_de.astype(DTYPE)
 
     phi_wrapper = PhiWrapper(phi_en_en, phi_en_en_w1, phi_en_de)
@@ -584,15 +606,16 @@ if __name__ == '__main__':
     intermediate_writer = open(model_param_writer_name + '.tmp', 'w')
     if mode == 'training':
         init_lr = 0.1
+        N = len(training_instances)
         for epoch in range(10):
             lr = init_lr / float(1.0 + (epoch * 0.3))
             train_prediction_probs = 0.0
             #print 'epoch:', epoch
-            random.shuffle(training_instances_with_tf)
+            random.shuffle(training_instances)
             pool = Pool(processes=cpu_count)
-            for ti,ti_tgf in training_instances_with_tf:
+            for ti in training_instances:
                 pool.apply_async(batch_sgd, args=(
-                    ti,ti_tgf,
+                    ti,
                     f_en_en_names,
                     f_en_de_names,
                     f_en_en_theta,
@@ -608,7 +631,7 @@ if __name__ == '__main__':
             print '\nepoch:', epoch
             print f_en_en_names, f_en_en_theta
             print f_en_de_names, f_en_de_theta
-            print '\ntrain prediction probs:', train_prediction_probs/ float(len(training_instances_with_tf))
+            print '\ntrain prediction probs:', train_prediction_probs/ float(len(training_instances))
             ext = '.user_adapt' if options.user_adapt else ('.exp_adapt' if options.experience_adapt else '')
             final_writer = codecs.open(options.save_params_file + ext + '.iter' + str(epoch), 'w', 'utf8')
             save_params(final_writer, f_en_en_theta, f_en_de_theta, f_en_en_names, f_en_de_names, domain2theta)
@@ -620,9 +643,10 @@ if __name__ == '__main__':
                 prec_at_25 = 0
                 prec_at_50 = 0
                 prec_totals = 0
+                N = len(tuning_instances)
                 pool_tune = Pool(processes=cpu_count)
-                for tune_ti,tune_ti_tgf in tuning_instances_with_tf:
-                    pool_tune.apply_async(batch_predictions, args=(tune_ti,tune_ti_tgf,
+                for tune_ti in tuning_instances:
+                    pool_tune.apply_async(batch_predictions, args=(tune_ti,
                                                             f_en_en_names,
                                                             f_en_de_names,
                                                             f_en_en_theta,
@@ -633,23 +657,9 @@ if __name__ == '__main__':
                                                             de2id,
                                                             en2id,
                                                             domain2theta, True), callback=batch_prediction_probs_accumulate)
-                    '''
-                    p, fgs, factor_dist = batch_predictions(tune_ti,tune_ti_tgf,
-                                                            f_en_en_names,
-                                                            f_en_de_names,
-                                                            f_en_en_theta,
-                                                            f_en_de_theta,
-                                                            phi_wrapper,
-                                                            lr,
-                                                            en_domain,
-                                                            de2id,
-                                                            en2id,
-                                                            domain2theta, True)
-                    test_prediction_probs += p
-                    '''
                 pool_tune.close()
                 pool_tune.join()
-                print '\ntune prediction probs:', test_prediction_probs/float(len(tuning_instances_with_tf))
+                print '\ntune prediction probs:', test_prediction_probs/float(len(tuning_instances))
                 print 'Prec at 0:','%0.2f' %  (float(100 * prec_at_0)/float(prec_totals)), 'total:', prec_totals
                 print 'prec at 25:','%0.2f' % (float(100 * prec_at_25)/float(prec_totals)), 'total:', prec_totals
                 print 'prec at 50:','%0.2f' % (float(100 * prec_at_50)/float(prec_totals)), 'total:', prec_totals
@@ -660,7 +670,7 @@ if __name__ == '__main__':
         final_writer = codecs.open(options.save_params_file + ext, 'w', 'utf8')
         save_params(final_writer, f_en_en_theta, f_en_de_theta, f_en_en_names, f_en_de_names, domain2theta)
     elif options.quick_predict:
-        testing_instances_with_tf = training_instances_with_tf
+        testing_instances = training_instances
         prediction_str = ''
         test_prediction_probs = 0.0
         lr = None
@@ -668,9 +678,10 @@ if __name__ == '__main__':
         prec_at_25 = 0
         prec_at_50 = 0
         prec_totals = 0
-        pool_predict = Pool(processes=cpu_count)
-        for test_ti,test_ti_tgf in testing_instances_with_tf:
-            p, fgs, factor_dist, prec_info = batch_predictions(test_ti, test_ti_tgf,
+        N = len(testing_instances)
+        print 'quick predict...', N
+        for test_ti in testing_instances:
+            p, fgs, factor_dist, prec_info = batch_predictions(test_ti, 
                                                     f_en_en_names,
                                                     f_en_de_names,
                                                     f_en_en_theta,
@@ -687,7 +698,7 @@ if __name__ == '__main__':
             prec_at_50  += prec_info[2]
             prec_totals  += prec_info[3]
             sys.stderr.write('~')
-        print '\nparallel prediction probs:', test_prediction_probs/float(len(testing_instances_with_tf))
+        print '\nprediction probs:', test_prediction_probs/float(len(testing_instances))
         print 'Prec at 0:','%0.2f' %  (float(100 * prec_at_0)/float(prec_totals)), 'total:', prec_totals
         print 'prec at 25:','%0.2f' % (float(100 * prec_at_25)/float(prec_totals)), 'total:', prec_totals
         print 'prec at 50:','%0.2f' % (float(100 * prec_at_50)/float(prec_totals)), 'total:', prec_totals
@@ -699,6 +710,8 @@ if __name__ == '__main__':
         prediction_str = ''
         lr = 0.05
         n_up = 0
+        testing_instances = training_instances
+        N = len(testing_instances)
         test_prediction_probs = 0.0
         prec_at_0 = 0
         prec_at_25 = 0
@@ -707,8 +720,8 @@ if __name__ == '__main__':
         ext = '.user_adapt' if options.user_adapt else ('.exp_adapt' if options.experience_adapt else '')
         final_writer = codecs.open(save_predictions_file + ext, 'w', 'utf8')
         final_dist_writer = codecs.open(save_predictions_file + ext + '.dist', 'w', 'utf8')
-        for ti,ti_tgf in training_instances_with_tf:
-            p, fgs, factor_dist, prec_info = batch_predictions(ti,ti_tgf,
+        for ti in training_instances:
+            p, fgs, factor_dist, prec_info = batch_predictions(ti,
                                                     f_en_en_names,
                                                     f_en_de_names,
                                                     f_en_en_theta,
@@ -720,11 +733,19 @@ if __name__ == '__main__':
                                                     en2id,
                                                     domain2theta)
             test_prediction_probs += p
+            prec_at_0 += prec_info[0]
+            prec_at_25  += prec_info[1]
+            prec_at_50  += prec_info[2]
+            prec_totals  += prec_info[3]
             prediction_str = prediction_str + fgs + '\n'
             final_writer.write(fgs + '\n')
             final_writer.flush()
             final_dist_writer.write(factor_dist + '\n')
             final_dist_writer.flush()
-        print '\nprediction probs:', test_prediction_probs/float(len(training_instances_with_tf)), n_up
+            sys.stderr.write('~')
+        print '\nprediction probs:', test_prediction_probs/float(len(training_instances))
+        print 'Prec at 0:','%0.2f' %  (float(100 * prec_at_0)/float(prec_totals)), 'total:', prec_totals
+        print 'prec at 25:','%0.2f' % (float(100 * prec_at_25)/float(prec_totals)), 'total:', prec_totals
+        print 'prec at 50:','%0.2f' % (float(100 * prec_at_50)/float(prec_totals)), 'total:', prec_totals
         final_dist_writer.close()
         final_writer.close()
