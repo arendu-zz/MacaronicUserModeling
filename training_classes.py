@@ -142,7 +142,7 @@ class Guess(dict):
         g = Guess(id=tuple(_dict['id']),
                   guess=_dict['guess'],
                   revealed=_dict['revealed'],
-                  reference = _dict['reference'],
+                  reference = _dict.get('reference', None),
                   l2_word=_dict['l2_word'])
         return g
 
