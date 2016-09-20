@@ -92,7 +92,7 @@ def copy_or_not(w, l2, english_d, ed):
 
 
 class Guess(dict):
-    def __init__(self, id, guess, revealed, l2_word):
+    def __init__(self, id, guess, revealed, l2_word, reference=None):
         dict.__init__(self)
         self.__dict__ = self
         if guess.strip() == '':
@@ -111,6 +111,7 @@ class Guess(dict):
         self.l2_word = l2_word
         self.id = id
         self.revealed = revealed
+        self.reference  = reference
 
     def copy(self, new_id=None):
         if new_id:
@@ -141,6 +142,7 @@ class Guess(dict):
         g = Guess(id=tuple(_dict['id']),
                   guess=_dict['guess'],
                   revealed=_dict['revealed'],
+                  reference = _dict['reference'],
                   l2_word=_dict['l2_word'])
         return g
 
