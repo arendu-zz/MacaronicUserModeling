@@ -164,7 +164,7 @@ def create_factor_graph(ti, learning_rate,
         d = ti.user_id
         fg.active_domains['en_en', d] = 1
         fg.active_domains['en_de', d] = 1
-        ys.stderr.write('+')
+        sys.stderr.write('+')
     elif options.experience_adapt:
         d = len(ti.past_sentences_seen)
         fg.active_domains['en_en', d] = 1
@@ -175,12 +175,21 @@ def create_factor_graph(ti, learning_rate,
     else:
         raise BaseException("2 domains not supported simultaniously")
 
+
     if options.use_correct_feat:
-        correct_feat = np.zeros((len_en_domain, len_de_domain), dtype=DTYPE)
-        sys.stderr.write(str(len(ti.current_guesses)))
+        correct_feature = np.zeros((len_en_domain, len_de_domain), dtype=DTYPE)
         for cg in ti.current_guesses:
-            sys.stderr.write(str(cg) + ','+ str(cg.guess == cg.l2_word) + "\n")
-            
+            if cg.guess == cg.reference:
+                i = en2id[cg.guess]
+                j = de2id[cg.l2_word]
+                correct_feature[i,j] += 1.00
+            else:
+                pass
+        correct_feature = np.reshape(correct_feature, (np.shape(fg.phi_en_de)[0],))
+        #print np.shape(fg.phi_en_de)
+        fg.phi_en_de[:, -3] = correct_feature
+    else:
+        pass
 
     if options.history:
         history_feature = np.zeros((len_en_domain, len_de_domain), dtype=DTYPE)
@@ -221,6 +230,7 @@ def create_factor_graph(ti, learning_rate,
             d_pmi_w1 = t[0, theta_en_en_names.index('pmi_w1')]
             pot_en_en_w1 += fg.phi_en_en_w1 * d_pmi_w1
 
+
     pot_en_de = fg.phi_en_de.dot(fg.theta_en_de.T)
 
     for ft, d in fg.active_domains:
@@ -231,7 +241,6 @@ def create_factor_graph(ti, learning_rate,
     fg.pot_en_de = np.exp(pot_en_de)
     fg.pot_en_en_w1 = np.exp(pot_en_en_w1)
     fg.pot_en_en = np.exp(pot_en_en)
-
     # create Ve x Vg factors
     for v, simplenode in var_node_pairs:
         if v.var_type == VAR_TYPE_PREDICTED:
@@ -336,7 +345,6 @@ def batch_prediction_probs_accumulate(result):
     else:
         prediction_str = (fgs if fgs is not None else 'none') + '\n'
     n_up += 1
-    sys.stderr.write('~')
 
 
 def batch_sgd(training_instance,
@@ -360,9 +368,7 @@ def batch_sgd(training_instance,
                              d2t=d2t)
     fg.initialize()
     fg.treelike_inference(3)
-    sys.stderr.write('.')
     # f_en_en_theta, f_en_de_theta = fg.update_theta()
-    # sys.stderr.write('|')
     if options.user_adapt or options.experience_adapt:
         g_en_en, g_en_de = fg.get_unregularized_gradeint()
         sample_ag = {}
@@ -378,7 +384,6 @@ def batch_sgd(training_instance,
     else:
         sample_ag = None
         g_en_en, g_en_de = fg.return_gradient()
-    sys.stderr.write('+')
     p  = fg.get_posterior_probs()
 
     return [sent_id, p, g_en_en, g_en_de, sample_ag]
@@ -417,8 +422,6 @@ def error_msg():
                 --phi_pmi_w1 [pmi w1 file]\n \
                 --phi_ed [ed file]\n \
                 --phi_ped [ped file]\n \
-                --phi_len [length file]\n \
-                --egt [eng given tag matrix]\n \
                 --cpu [4 by default]\n \
                 --save_params [save params to this file] or \n \
                 --load_params [load params from this file]] --save_predictions [save predictions to file]\n')
@@ -437,8 +440,6 @@ if __name__ == '__main__':
     opt.add_option('--phi_pmi_w1', dest='phi_pmi_w1', default='')
     opt.add_option('--phi_ed', dest='phi_ed', default='')
     opt.add_option('--phi_ped', dest='phi_ped', default='')
-    opt.add_option('--phi_len', dest='phi_len', default='')
-    opt.add_option('--egt', dest='egt', default='')
     opt.add_option('--cpu', dest='cpus', default='')
     opt.add_option('--reg_param', dest='reg_param', default='0.2')
     opt.add_option('--reg_param_ua_scale', dest='reg_param_ua_scale', default='1.0')
@@ -456,7 +457,7 @@ if __name__ == '__main__':
 
     (options, _) = opt.parse_args()
 
-    if options.training_instances == '' or options.en_domain == '' or options.de_domain == '' or options.phi_pmi_w1 == '' or options.phi_pmi == '' or options.phi_ed == '' or options.phi_ped == '' or options.phi_len == '' or options.egt == '':
+    if options.training_instances == '' or options.en_domain == '' or options.de_domain == '' or options.phi_pmi_w1 == '' or options.phi_pmi == '' or options.phi_ed == '' or options.phi_ped == '':
         error_msg()
         exit(1)
     elif options.save_params_file == '' and options.load_params_file == '' and options.save_predictions_file == '':
@@ -487,7 +488,7 @@ if __name__ == '__main__':
         try:
             domains = [d.strip() for d in codecs.open(options.training_instances + '.users').readlines()]
         except IOError:
-            sys.stderr.write("user_adapt option can not find .users file.")
+            sys.stderr.write("user_adapt option can not find .users file. (looked for:" + options.training_instances + ".users)\n")
             exit(1)
     if options.experience_adapt:
         try:
@@ -502,7 +503,7 @@ if __name__ == '__main__':
         f_en_en_names = ['pmi', 'pmi_w1']
         f_en_en_theta = np.zeros((1, len(f_en_en_names)), dtype=DTYPE)
         #f_en_de_names = ['ed', 'ped', 'length','wordfreq', 'full_history', 'hit_history'] #removed length and word freq
-        f_en_de_names = ['ed', 'ped','correct', 'incorrect', 'full_history', 'hit_history']
+        f_en_de_names = ['ed', 'ped','correct',  'full_history', 'hit_history']
         f_en_de_theta = np.zeros((1, len(f_en_de_names)), dtype=DTYPE)
         domain2theta = {}
         for d in domains:
@@ -594,10 +595,9 @@ if __name__ == '__main__':
     #print 'reading egt..'
     #egt_mat = np.loadtxt(options.egt, dtype=DTYPE)
     phi_en_de3 = np.zeros_like(phi_en_de1)  # place holder for correct
-    phi_en_de4 = np.zeros_like(phi_en_de1)  # place holder for incorrect
-    phi_en_de5 = np.zeros_like(phi_en_de1)  # place holder for history
-    phi_en_de6 = np.zeros_like(phi_en_de1)  # place holder for incorrect history
-    phi_en_de = np.concatenate((phi_en_de1, phi_en_de2, phi_en_de3, phi_en_de4, phi_en_de5, phi_en_de6), axis=1)
+    phi_en_de4 = np.zeros_like(phi_en_de1)  # place holder for history 
+    phi_en_de5 = np.zeros_like(phi_en_de1)  # place holder for incorrect history
+    phi_en_de = np.concatenate((phi_en_de1, phi_en_de2, phi_en_de3, phi_en_de4, phi_en_de5), axis=1)
     phi_en_de = phi_en_de.astype(DTYPE)
 
     phi_wrapper = PhiWrapper(phi_en_en, phi_en_en_w1, phi_en_de)
@@ -607,7 +607,7 @@ if __name__ == '__main__':
     if mode == 'training':
         init_lr = 0.1
         N = len(training_instances)
-        for epoch in range(10):
+        for epoch in range(3):
             lr = init_lr / float(1.0 + (epoch * 0.3))
             train_prediction_probs = 0.0
             #print 'epoch:', epoch
