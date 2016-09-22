@@ -3,7 +3,7 @@ import sys
 import numpy as np
 from numpy import float64 as DTYPE
 import random
-import array_utils as au
+import c_array_utils as au
 from scipy import sparse
 import pdb
 import time
@@ -43,19 +43,39 @@ class FactorGraph():
         self.isLoopy = None
         self.regularization_param = 0.01
         self.learning_rate = 0.1
-        self.measure_time = False
+        self.report_times = False
         self.cg_times = []
+        self.it_times = []
         self.exp_cg_times = []
         self.obs_cg_times = []
         self.diff_cg_times = []
         self.gg_times = []
         self.sgg_times = []
         self.active_domains = {}
-        self.use_approx_learning = False
+        self.use_approx_inference = False
+        self.use_approx_gradient = False
         if isinstance(self.theta_en_en_names, tuple):
             self.theta_en_en_names = self.theta_en_en_names[0]
         if isinstance(self.theta_en_de_names, tuple):
             self.theta_en_de_names = self.theta_en_de_names[0]
+
+    def display_timing_info(self):
+        if self.report_times and len(self.variables) > 5:
+            #self.cg_times = []
+            #self.exp_cg_times = []
+            #self.obs_cg_times = []
+            #self.diff_cg_times = []
+            #self.gg_times = []
+            #self.sgg_times = []
+            print '\ncgtimes    :', np.sum(self.cg_times) / len(self.cg_times), 'total', np.sum(self.cg_times), 'len', len(self.cg_times)
+            print 'ggtimes    :', np.sum(self.gg_times) / len(self.gg_times), 'total', np.sum(self.gg_times), 'len', len(self.gg_times)
+            print 'sggtimes    :', np.sum(self.sgg_times) / len(self.sgg_times), 'total', np.sum(self.sgg_times), 'len', len(self.sgg_times)
+            print 'it_times    :', np.sum(self.it_times) / len(self.it_times), 'total', np.sum(self.it_times), 'len', len(self.it_times)
+            print 'num vars   :', len(self.variables)
+        else:
+            pass
+        return True
+
 
     def get_precision_counts(self):
         p_at_0 = 0
@@ -199,6 +219,7 @@ class FactorGraph():
     def treelike_inference(self, iterations):
         iterations = iterations if self.isLoopy else 1
         for _ in range(iterations):
+            if self.report_times: it = time.time()
             # print 'inference iterations', _
             _rand_key = random.sample(self.variables.keys(), 1)[0]
             _root = self.variables[_rand_key]
@@ -221,6 +242,8 @@ class FactorGraph():
                     #sys.stderr.write('1-')
                     frm.update_message_to(to)
                     #sys.stderr.write('-1')
+            if self.report_times: self.it_times.append(time.time() - it)
+        return True
 
     def get_posterior_probs(self):
         log_posterior = 0.0
@@ -533,7 +556,7 @@ class FactorNode():
                     r = np.reshape(m.m, (1, np.size(m.m)))  # row vector
                 else:
                     raise NotImplementedError("only supports pairwise factors..")
-            if self.graph.use_approx_learning:
+            if self.graph.use_approx_inference:
                 #sys.stderr.write('+')
                 # approx_marginals = au.make_sparse_and_dot(c, r)
                 approx_marginals, c_idx, r_idx = au.sparse_dot(c, r)
@@ -554,15 +577,14 @@ class FactorNode():
                 #    print 'c not uniform...'
         return beliefs
 
-    '''
-    def get_observed_factor(self):
+    def get_observed_factor_as_array(self):
         # of = np.zeros_like(self.potential_table.table)
         cell = sorted([(self.potential_table.var_id2dim[v.id], v.supervised_label_index) for v in self.varset])
         cell = tuple([o for d, o in cell])
         # print 'cell', cell, self.potential_table.table.shape
         # of[cell] = 1.0
         return [cell]
-    '''
+
     def get_observed_factor(self):
         of = np.zeros_like(self.potential_table.table, dtype=DTYPE)
         cell = sorted([(self.potential_table.var_id2dim[v.id], v.supervised_label_index) for v in self.varset])
@@ -572,10 +594,12 @@ class FactorNode():
 
 
     def get_gradient(self):
-        if self.graph.measure_time: cg = time.time()
+        if self.graph.report_times: cg = time.time()
         g = self.cell_gradient()
-        if self.graph.measure_time: self.graph.cg_times.append(time.time() - cg)
-        if self.graph.measure_time: sgg = time.time()
+        #g = self.cell_gradient_alt()
+        #assert  np.allclose(g, g_alt)
+        if self.graph.report_times: self.graph.cg_times.append(time.time() - cg)
+        if self.graph.report_times: sgg = time.time()
         if self.potential_table.observed_dim is not None:
             sparse_g = np.zeros(self.get_shape(), dtype=DTYPE)
             g = np.reshape(g, (np.size(g),))
@@ -584,40 +608,33 @@ class FactorNode():
         else:
             # g is already  a matrix
             pass
-        if self.graph.measure_time: self.graph.sgg_times.append(time.time() - sgg)
+        if self.graph.report_times: self.graph.sgg_times.append(time.time() - sgg)
         f_ij = np.reshape(g, (np.size(g), 1))
-        gg = time.time()
+        if self.graph.report_times: gg = time.time()
         # print 'nz appx, orig, full :', np.count_nonzero(f_ij_approx), np.count_nonzero(f_ij), np.size(f_ij)
-        grad1 = (self.get_phi().T.dot(f_ij)).T
-        # grad1 = (self.get_phi_csc().T.dot(f_ij)).T
-        # grad_approx = au.induce_s_mutliply(f_ij, self.get_phi().T, k=1000000000)
-        # grad_approx = au.induce_s_mutliply_clip(f_ij, self.get_phi().T, k=1000)
-        # grad1 = grad_approx.T
+        if self.graph.use_approx_gradient:
+            grad_approx = au.induce_s_mutliply_clip(f_ij, self.get_phi().T)
+            grad1 = grad_approx.T
+        else:
+            grad1 = (self.get_phi().T.dot(f_ij)).T
         # if __debug__: assert  np.allclose(grad1, grad2.T)
-        if self.graph.measure_time: self.graph.gg_times.append(time.time() - gg)
+        if self.graph.report_times: self.graph.gg_times.append(time.time() - gg)
         return grad1
 
     def cell_gradient(self):
         obs_counts = self.get_observed_factor()
         exp_counts = self.get_factor_beliefs()  # this is the same because I assume binary features  values at the "cell level"
-        return obs_counts - exp_counts
+        cell_g = obs_counts - exp_counts
+        return cell_g
 
-    '''
-    def cell_gradient(self):
-        obs_cg = time.time()
-        cell = self.get_observed_factor()
-        self.graph.obs_cg_times.append(time.time() - obs_cg)
-        exp_cg = time.time()
+    def cell_gradient_alt(self):
+        cell = self.get_observed_factor_as_array()
         exp_counts = self.get_factor_beliefs()  # this is the same because I assume binary features  values at the "cell level"
-        self.graph.exp_cg_times.append(time.time() - exp_cg)
-        diff_cg = time.time()
         d = -exp_counts
         assert len(cell) == 1
         for c in cell:
             d[c] = 1.0 +  d[c]
-        self.graph.diff_cg_times.append(time.time() - diff_cg)
         return d
-    '''
 
 class ObservedFactor(FactorNode):
     def __init__(self, id, observed_domain_type, observed_value):

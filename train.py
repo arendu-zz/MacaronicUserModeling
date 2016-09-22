@@ -10,11 +10,9 @@ from LBP import FactorNode, FactorGraph, VariableNode, VAR_TYPE_PREDICTED, Poten
 from time import ctime
 import codecs
 from numpy import float64 as DTYPE
-from multiprocessing import Pool, Lock
 from array_utils import PhiWrapper
 
 global f_en_en_theta, f_en_de_theta, train_prediction_probs, intermediate_writer, prediction_str, final_writer, n_up
-global lock
 global options
 global domain2theta
 global prec_at_0, prec_at_25, prec_at_50, prec_totals
@@ -23,7 +21,6 @@ global N
 PRED2GIVEN = 'pred2given'
 PRED2PRED = 'pred2pred'
 n_up = 0
-lock = Lock()
 prec_at_0 = 0
 prec_at_25 = 0
 prec_at_50 = 0
@@ -394,7 +391,6 @@ def batch_sgd(training_instance,
 def batch_sgd_accumulate(result):
     global f_en_en_theta, f_en_de_theta, n_up, train_prediction_probs, domain2theta
     if options.user_adapt or options.experience_adapt:
-        lock.acquire()
         train_prediction_probs += result[1]
         f_en_en_theta += result[2]
         f_en_de_theta += result[3]
@@ -403,14 +399,11 @@ def batch_sgd_accumulate(result):
             ag = sample_ag[f_type, d]
             domain2theta[f_type, d] += ag
         sys.stderr.write('*')
-        lock.release()
     else:
-        lock.acquire()
         train_prediction_probs += result[1]
         f_en_en_theta += result[2]
         f_en_de_theta += result[3]
         sys.stderr.write('*')
-        lock.release()
         # print 'received', result[0], f_en_en_theta, f_en_de_theta
 
 def error_msg():
@@ -424,7 +417,6 @@ def error_msg():
                 --phi_pmi_w1 [pmi w1 file]\n \
                 --phi_ed [ed file]\n \
                 --phi_ped [ped file]\n \
-                --cpu [4 by default]\n \
                 --save_params [save params to this file] or \n \
                 --load_params [load params from this file]] --save_predictions [save predictions to file]\n')
     return True
@@ -443,7 +435,6 @@ if __name__ == '__main__':
     opt.add_argument('--phi_pmi_w1', dest='phi_pmi_w1', default='')
     opt.add_argument('--phi_ed', dest='phi_ed', default='')
     opt.add_argument('--phi_ped', dest='phi_ped', default='')
-    opt.add_argument('--cpu', dest='cpus', default='')
     opt.add_argument('--reg_param', dest='reg_param', default='0.2')
     opt.add_argument('--reg_param_ua_scale', dest='reg_param_ua_scale', default='1.0')
     opt.add_argument('--save_params', dest='save_params_file', default='')
@@ -479,7 +470,7 @@ if __name__ == '__main__':
     print 'use correct', options.use_correct_feat
     print 'use correct per l2 word', options.use_correct_feat_per_l2_word
 
-    cpu_count = 4 if options.cpus.strip() == '' else int(options.cpus)
+    cpu_count = 1 
     print 'cpu count:', cpu_count
     print 'reg param:', options.reg_param
     print 'reg param ua scale:', options.reg_param_ua_scale
@@ -549,7 +540,7 @@ if __name__ == '__main__':
     print 'reading in  ti and domains...'
     training_instances = codecs.open(options.training_instances).readlines()
     if options.report_times:
-        training_instances = training_instances[:20]
+        training_instances = training_instances[:10]
 
     if options.tuning_instances == '':
         tuning_instances = None
@@ -622,9 +613,8 @@ if __name__ == '__main__':
             train_prediction_probs = 0.0
             #print 'epoch:', epoch
             random.shuffle(training_instances)
-            pool = Pool(processes=cpu_count)
             for ti in training_instances:
-                pool.apply_async(batch_sgd, args=(
+                result = batch_sgd(
                     ti,
                     f_en_en_names,
                     f_en_de_names,
@@ -635,9 +625,8 @@ if __name__ == '__main__':
                     en_domain,
                     de2id,
                     en2id,
-                    domain2theta), callback=batch_sgd_accumulate)
-            pool.close()
-            pool.join()
+                    domain2theta)
+                batch_sgd_accumulate(result)
             print '\nepoch:', epoch
             print f_en_en_names, f_en_en_theta
             print f_en_de_names, f_en_de_theta
@@ -654,9 +643,8 @@ if __name__ == '__main__':
                 prec_at_50 = 0
                 prec_totals = 0
                 N = len(tuning_instances)
-                pool_tune = Pool(processes=cpu_count)
                 for tune_ti in tuning_instances:
-                    pool_tune.apply_async(batch_predictions, args=(tune_ti,
+                    result = batch_predictions(tune_ti,
                                                             f_en_en_names,
                                                             f_en_de_names,
                                                             f_en_en_theta,
@@ -666,9 +654,8 @@ if __name__ == '__main__':
                                                             en_domain,
                                                             de2id,
                                                             en2id,
-                                                            domain2theta, True), callback=batch_prediction_probs_accumulate)
-                pool_tune.close()
-                pool_tune.join()
+                                                            domain2theta, True)
+                    batch_prediction_probs_accumulate(result)
                 print '\ntune prediction probs:', test_prediction_probs/float(len(tuning_instances))
                 print 'Prec at 0:','%0.2f' %  (float(100 * prec_at_0)/float(prec_totals)), 'total:', prec_totals
                 print 'prec at 25:','%0.2f' % (float(100 * prec_at_25)/float(prec_totals)), 'total:', prec_totals

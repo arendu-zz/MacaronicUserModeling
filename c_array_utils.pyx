@@ -1,5 +1,6 @@
 __author__ = 'arenduchintala'
 import numpy as np
+cimport numpy as np
 import warnings
 import time
 import itertools
@@ -8,14 +9,14 @@ from scipy import sparse
 np.set_printoptions(linewidth=300, precision=12)
 
 
-class PhiWrapper(object):
+cdef class PhiWrapper:
     def __init__(self, phi_en_en, phi_en_en_w1, phi_en_de):
         self.phi_en_en = phi_en_en
         self.phi_en_en_w1 = phi_en_en_w1
         self.phi_en_de = phi_en_de
 
 
-class ThetaWrapper(object):
+cdef class ThetaWrapper:
     def __init__(self, theta_en_en_names, theta_en_en, theta_en_de_names, theta_en_de):
         self.theta_en_en_names = theta_en_en_names
         self.theta_en_de_names = theta_en_de_names
@@ -23,24 +24,24 @@ class ThetaWrapper(object):
         self.theta_en_de = theta_en_de
 
 
-def pointwise_multiply(m1, m2):
+cpdef pointwise_multiply(m1, m2):
     #lm1 = np.log(m1)
     #lm2 = np.log(m2)
     #return np.exp(lm1 + lm2)
      return np.multiply(m1, m2)
     
-def clip(m1):
+cpdef clip(m1):
     m1[m1 < 1.0e-100] = 0.0  # we dont have to worry about these being negative...
     return m1
 
 
-def sparse_normalize(m1, c_idx, r_idx):
+cpdef sparse_normalize(m1, c_idx, r_idx):
     s = np.sum(m1[np.ix_(c_idx, r_idx)])
     m1[np.ix_(c_idx, r_idx)] = m1[np.ix_(c_idx, r_idx)] / s
     return m1
 
 
-def normalize(m1):
+cpdef normalize(m1):
     s = np.sum(m1)
     if s > 0.0:
         try:
@@ -54,7 +55,7 @@ def normalize(m1):
         return m1
 
 
-def induce_s_pointwise_multiply_clip(d1, d2, k=1000):
+cpdef induce_s_pointwise_multiply_clip(d1, d2, k=1000):
     if __debug__: assert np.shape(d1) == np.shape(d2)
     indices = (-d1).argpartition(k, axis=None)[:k]
     x, y = np.unravel_index(indices, d1.shape)
@@ -63,7 +64,7 @@ def induce_s_pointwise_multiply_clip(d1, d2, k=1000):
     return result
 
 
-def induce_s(m1, k=1000):
+cpdef induce_s(m1, k=1000):
     if __debug__: assert np.shape(m1)[1] == 1
     if k > np.size(m1):
         return m1
@@ -75,7 +76,7 @@ def induce_s(m1, k=1000):
         return new_m1
 
 
-def induce_s_mutliply_clip(s1, d2, k=1000):
+cpdef induce_s_mutliply_clip(s1, d2, k=1000):
     if __debug__: assert np.shape(d2)[0] < np.shape(d2)[1]
     if __debug__: assert np.shape(s1)[0] == np.shape(d2)[1] and np.shape(s1)[1] == 1
     k = k if k < np.shape(s1)[0] else np.shape(s1)[0] - 1
@@ -87,7 +88,7 @@ def induce_s_mutliply_clip(s1, d2, k=1000):
     return d2_trunc.dot(s1_trunc)
 
 
-def induce_s_multiply_threshold(s1, d2):
+cpdef induce_s_multiply_threshold(s1, d2):
     raise NotImplementedError("do not use it seems very slow..")
     if __debug__: assert np.shape(d2)[0] < np.shape(d2)[1]
     if __debug__: assert np.shape(s1)[0] == np.shape(d2)[1] and np.shape(s1)[1] == 1
@@ -99,11 +100,11 @@ def induce_s_multiply_threshold(s1, d2):
     return d2_trunc.dot(s1_trunc), s1_approx_nz
 
 
-def dd_matrix_multiply(m1, m2):
+cpdef dd_matrix_multiply(m1, m2):
     return m1.dot(m2)
 
 
-def make_sparse_and_dot(m1, m2, k=100):
+cpdef make_sparse_and_dot(m1, m2, k=100):
     m1_shaped = np.reshape(m1, np.size(m1))
     m2_shaped = np.reshape(m2, np.size(m2))
     m1_max_idx = np.argpartition(m1_shaped, -k)[-k:]
@@ -114,24 +115,30 @@ def make_sparse_and_dot(m1, m2, k=100):
     return d
 
 
-def sparse_pointwise_multiply(sparse_m, c_idx, r_idx, dense_m):
+cpdef np.ndarray[np.float64_t, ndim=2] sparse_pointwise_multiply(np.ndarray[np.float64_t, ndim=2] sparse_m, 
+        np.ndarray[np.int_t, ndim=1] c_idx, 
+        np.ndarray[np.int_t, ndim=1] r_idx, 
+        np.ndarray[np.float64_t, ndim=2] dense_m):
     z = np.zeros_like(dense_m)
     z[np.ix_(c_idx, r_idx)] = np.multiply(sparse_m[np.ix_(c_idx, r_idx)], dense_m[np.ix_(c_idx, r_idx)])
     return z
 
 
-def sparse_dot(m1, m2, k=100):
+cpdef sparse_dot(np.ndarray[np.float64_t, ndim=2] m1,  np.ndarray[np.float64_t, ndim=2] m2, int k=5):
     assert m1.shape[0] == m2.shape[1]
     assert m1.shape[1] == m2.shape[0] == 1
     n = m1.shape[0]
+    cdef np.ndarray[np.int_t, ndim=1] m1_idx = np.empty(k, dtype=np.int)
+    cdef np.ndarray[np.int_t, ndim=1] m2_idx = np.empty(k, dtype=np.int)
+    cdef np.ndarray[np.float64_t, ndim=2] out = np.zeros((n,n), dtype=np.float)
     m1_idx = np.argpartition(-m1, k, axis=0)[:k].ravel()
     m2_idx = np.argpartition(-m2, k)[:, :k].ravel()
-    out = np.zeros((n, n))
+    #out = np.zeros((n, n))
     out[np.ix_(m1_idx, m2_idx)] = np.dot(m1[m1_idx], m2[:, m2_idx])
     return out, m1_idx, m2_idx
 
 
-def sparse_multiply_and_normalize(s_m1, m2):
+cpdef sparse_multiply_and_normalize(s_m1, m2):
     m2_z = np.zeros_like(m2)
     m2_d = {}
     n = 0.0
@@ -144,26 +151,26 @@ def sparse_multiply_and_normalize(s_m1, m2):
     return m2_z, m2_d
 
 
-def sd_matrix_multiply(s1, d2):
+cpdef sd_matrix_multiply(s1, d2):
     return s1.dot(d2)
 
 
-def sd_pointwise_multiply(s1, d2):
+cpdef sd_pointwise_multiply(s1, d2):
     raise NotImplementedError("not implemented pointwise multiply for sparse-dense matrix")
 
 
-def ss_matix_multiply(s1, s2):
+cpdef ss_matix_multiply(s1, s2):
     return s1.dot(s2)
 
 
-def make_adapt_phi(phi, num_adaptations):
+cpdef make_adapt_phi(phi, num_adaptations):
     adapt_phi = np.zeros((np.shape(phi)[0], np.shape(phi)[1] * (num_adaptations + 1)))
     r = range(0, np.shape(phi)[1])
     adapt_phi[:, r] = phi
     return adapt_phi
 
 
-def set_adaptation(f_size, adapt_phi, active_adaptations):
+cpdef set_adaptation(f_size, adapt_phi, active_adaptations):
     f = f_size
     r_0 = range(f_size)
     for i in active_adaptations:
@@ -175,7 +182,7 @@ def set_adaptation(f_size, adapt_phi, active_adaptations):
     return adapt_phi
 
 
-def set_adaptation_off(f_size, adapt_phi, active_adaptations):
+cpdef set_adaptation_off(f_size, adapt_phi, active_adaptations):
     f = f_size
     for i in active_adaptations:
         st = i * f
@@ -186,7 +193,7 @@ def set_adaptation_off(f_size, adapt_phi, active_adaptations):
     return adapt_phi
 
 
-def set_original(phi, adapt_phi):
+cpdef set_original(phi, adapt_phi):
     r = range(0, np.shape(phi)[1])
     adapt_phi[:, r] = phi
     return adapt_phi
