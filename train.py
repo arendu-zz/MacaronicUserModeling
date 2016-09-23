@@ -153,7 +153,7 @@ def create_factor_graph(ti, learning_rate,
                      phi_en_en_w1=phi_wrapper.phi_en_en_w1)
 
     fg.learning_rate = learning_rate
-    fg.use_approx_inference = options.use_approx_inference 
+    fg.use_approx_beliefs = options.use_approx_beliefs 
     fg.use_approx_gradient = options.use_approx_gradient
     fg.report_times = options.report_times
     fg.regularization_param = float(options.reg_param) / float(N) 
@@ -444,7 +444,7 @@ if __name__ == '__main__':
     opt.add_argument('--session_history', dest='session_history', default=False, action='store_true')
     opt.add_argument('--user_adapt', dest='user_adapt', default=False, action='store_true')
     opt.add_argument('--quick_predict', dest='quick_predict', default=False, action='store_true')
-    opt.add_argument('--use_approx_inference', dest='use_approx_inference', default=False, action='store_true')
+    opt.add_argument('--use_approx_beliefs', dest='use_approx_beliefs', default=False, action='store_true')
     opt.add_argument('--use_approx_gradient', dest='use_approx_gradient', default=False, action='store_true')
     opt.add_argument('--report_times', dest='report_times', default=False, action='store_true')
     opt.add_argument('--experience_adapt', dest='experience_adapt', default=False, action='store_true')
@@ -465,7 +465,7 @@ if __name__ == '__main__':
     print 'user adapt:', options.user_adapt
     print 'use experience adapt:', options.experience_adapt
     print 'use approx gradient', options.use_approx_gradient
-    print 'use approx inference:', options.use_approx_inference
+    print 'use approx beliefs:', options.use_approx_beliefs
     print 'use history', options.history
     print 'use correct', options.use_correct_feat
     print 'use correct per l2 word', options.use_correct_feat_per_l2_word
@@ -608,7 +608,7 @@ if __name__ == '__main__':
     if mode == 'training':
         init_lr = 0.1
         N = len(training_instances)
-        for epoch in range(3):
+        for epoch in range(2):
             lr = init_lr / float(1.0 + (epoch * 0.3))
             train_prediction_probs = 0.0
             #print 'epoch:', epoch
