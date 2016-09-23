@@ -46,13 +46,10 @@ class FactorGraph():
         self.report_times = False
         self.cg_times = []
         self.it_times = []
-        self.exp_cg_times = []
-        self.obs_cg_times = []
-        self.diff_cg_times = []
         self.gg_times = []
         self.sgg_times = []
         self.active_domains = {}
-        self.use_approx_inference = False
+        self.use_approx_beliefs = False
         self.use_approx_gradient = False
         if isinstance(self.theta_en_en_names, tuple):
             self.theta_en_en_names = self.theta_en_en_names[0]
@@ -539,12 +536,11 @@ class FactorNode():
         r = None
         c = None
         if len(self.varset) == 1:
-            m = Message.new_message(self.varset[0].domain, 1.0 / len(self.varset[0].domain))
-            m.renormalize()
-            marginals = m.m
-            assert marginals.shape == self.potential_table.table.shape
-            beliefs = np.multiply(marginals, self.potential_table.table)  # O(n)
-            beliefs = au.normalize(beliefs)  # todo: make this faster?
+            #m = Message.new_message(self.varset[0].domain, 1.0 / len(self.varset[0].domain))
+            #marginals = m.m
+            #assert marginals.shape == self.potential_table.table.shape
+            #beliefs = np.multiply(marginals, self.potential_table.table)  # O(n)
+            beliefs = au.normalize(self.potential_table.table)  # todo: make this faster?
         else:
             for v in self.varset:
                 vd = self.potential_table.var_id2dim[v.id]
@@ -556,10 +552,10 @@ class FactorNode():
                     r = np.reshape(m.m, (1, np.size(m.m)))  # row vector
                 else:
                     raise NotImplementedError("only supports pairwise factors..")
-            if self.graph.use_approx_inference:
+            if self.graph.use_approx_beliefs:
                 #sys.stderr.write('+')
                 # approx_marginals = au.make_sparse_and_dot(c, r)
-                approx_marginals, c_idx, r_idx = au.sparse_dot(c, r)
+                approx_marginals, c_idx, r_idx = au.sparse_dot(c, r) 
                 # approx_beliefs_mat, _ = au.sparse_multiply_and_normalize(approx_marginals, self.potential_table.table)
                 # beliefs = approx_beliefs_mat
                 beliefs = au.sparse_pointwise_multiply(approx_marginals, c_idx, r_idx, self.potential_table.table)
@@ -569,7 +565,7 @@ class FactorNode():
             else:
                 #sys.stderr.write('-')
                 marginals = au.dd_matrix_multiply(c, r)  # np.dot(c, r)
-                assert marginals.shape == self.potential_table.table.shape
+                #assert marginals.shape == self.potential_table.table.shape
                 beliefs = np.multiply(marginals, self.potential_table.table)  # O(n)
                 beliefs = au.normalize(beliefs)
                 pass
