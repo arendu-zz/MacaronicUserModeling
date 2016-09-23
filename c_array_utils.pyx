@@ -55,34 +55,36 @@ cpdef normalize(m1):
         return m1
 
 
-cpdef induce_s_pointwise_multiply_clip(d1, d2, k=1000):
+cpdef induce_s_pointwise_multiply_clip(d1, d2):
+    cdef int K = 100
     if __debug__: assert np.shape(d1) == np.shape(d2)
-    indices = (-d1).argpartition(k, axis=None)[:k]
+    indices = (-d1).argpartition(K, axis=None)[:K]
     x, y = np.unravel_index(indices, d1.shape)
     result = np.zeros_like(d2)
     result[x, y] = d1[x, y] * d2[x, y]
     return result
 
 
-cpdef induce_s(m1, k=1000):
+cpdef induce_s(m1):
+    cdef int K = 100
     if __debug__: assert np.shape(m1)[1] == 1
-    if k > np.size(m1):
+    if K > np.size(m1):
         return m1
     else:
-        indices = (-m1).argpartition(k, axis=None)[:k]
+        indices = (-m1).argpartition(K, axis=None)[:K]
         x, y = np.unravel_index(indices, m1.shape)
         new_m1 = np.zeros_like(m1)
         new_m1[x, y] = m1[x, y]
         return new_m1
 
 
-cpdef induce_s_mutliply_clip(s1, d2, k=1000):
+cpdef induce_s_mutliply_clip(s1, d2):
+    cdef int K = 100
     if __debug__: assert np.shape(d2)[0] < np.shape(d2)[1]
     if __debug__: assert np.shape(s1)[0] == np.shape(d2)[1] and np.shape(s1)[1] == 1
-    k = k if k < np.shape(s1)[0] else np.shape(s1)[0] - 1
     s1_abs = np.abs(s1)
     s1_abs = np.reshape(s1_abs, (np.size(s1),))
-    max_idx = np.argpartition(s1_abs, -k)[-k:]
+    max_idx = np.argpartition(s1_abs, -K)[-K:]
     d2_trunc = d2[:, max_idx]
     s1_trunc = s1[max_idx, :]
     return d2_trunc.dot(s1_trunc)
@@ -104,11 +106,12 @@ cpdef dd_matrix_multiply(m1, m2):
     return m1.dot(m2)
 
 
-cpdef make_sparse_and_dot(m1, m2, k=100):
+cpdef make_sparse_and_dot(m1, m2):
+    cdef int K = 100
     m1_shaped = np.reshape(m1, np.size(m1))
     m2_shaped = np.reshape(m2, np.size(m2))
-    m1_max_idx = np.argpartition(m1_shaped, -k)[-k:]
-    m2_max_idx = np.argpartition(m2_shaped, -k)[-k:]
+    m1_max_idx = np.argpartition(m1_shaped, -K)[-K:]
+    m2_max_idx = np.argpartition(m2_shaped, -K)[-K:]
     d = {}
     for x, y in itertools.product(m1_max_idx, m2_max_idx):
         d[x, y] = m1[x, 0] * m2[0, y]
@@ -124,15 +127,16 @@ cpdef np.ndarray[np.float64_t, ndim=2] sparse_pointwise_multiply(np.ndarray[np.f
     return z
 
 
-cpdef sparse_dot(np.ndarray[np.float64_t, ndim=2] m1,  np.ndarray[np.float64_t, ndim=2] m2, int k=5):
+cpdef sparse_dot(np.ndarray[np.float64_t, ndim=2] m1,  np.ndarray[np.float64_t, ndim=2] m2):
+    cdef int K = 100
     assert m1.shape[0] == m2.shape[1]
     assert m1.shape[1] == m2.shape[0] == 1
     n = m1.shape[0]
-    cdef np.ndarray[np.int_t, ndim=1] m1_idx = np.empty(k, dtype=np.int)
-    cdef np.ndarray[np.int_t, ndim=1] m2_idx = np.empty(k, dtype=np.int)
+    cdef np.ndarray[np.int_t, ndim=1] m1_idx = np.empty(K, dtype=np.int)
+    cdef np.ndarray[np.int_t, ndim=1] m2_idx = np.empty(K, dtype=np.int)
     cdef np.ndarray[np.float64_t, ndim=2] out = np.zeros((n,n), dtype=np.float)
-    m1_idx = np.argpartition(-m1, k, axis=0)[:k].ravel()
-    m2_idx = np.argpartition(-m2, k)[:, :k].ravel()
+    m1_idx = np.argpartition(-m1, K, axis=0)[:K].ravel()
+    m2_idx = np.argpartition(-m2, K)[:, :K].ravel()
     #out = np.zeros((n, n))
     out[np.ix_(m1_idx, m2_idx)] = np.dot(m1[m1_idx], m2[:, m2_idx])
     return out, m1_idx, m2_idx
