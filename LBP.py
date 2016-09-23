@@ -44,7 +44,8 @@ class FactorGraph():
         self.regularization_param = 0.01
         self.learning_rate = 0.1
         self.report_times = False
-        self.cg_times = []
+        self.bb_times = []
+        self.ub_times = []
         self.it_times = []
         self.gg_times = []
         self.sgg_times = []
@@ -57,17 +58,20 @@ class FactorGraph():
             self.theta_en_de_names = self.theta_en_de_names[0]
 
     def display_timing_info(self):
-        if self.report_times and len(self.variables) > 5:
-            #self.cg_times = []
-            #self.exp_cg_times = []
-            #self.obs_cg_times = []
-            #self.diff_cg_times = []
-            #self.gg_times = []
-            #self.sgg_times = []
-            print '\ncgtimes    :', np.sum(self.cg_times) / len(self.cg_times), 'total', np.sum(self.cg_times), 'len', len(self.cg_times)
-            print 'ggtimes    :', np.sum(self.gg_times) / len(self.gg_times), 'total', np.sum(self.gg_times), 'len', len(self.gg_times)
-            print 'sggtimes    :', np.sum(self.sgg_times) / len(self.sgg_times), 'total', np.sum(self.sgg_times), 'len', len(self.sgg_times)
-            print 'it_times    :', np.sum(self.it_times) / len(self.it_times), 'total', np.sum(self.it_times), 'len', len(self.it_times)
+        if self.report_times:
+            if len(self.ub_times) > 0:
+                print '\nubtimes    :', np.sum(self.ub_times) / len(self.ub_times), 'total', np.sum(self.ub_times), 'len', len(self.ub_times)
+            if len(self.bb_times) > 0:
+                print 'bbtimes    :', np.sum(self.bb_times) / len(self.bb_times), 'total', np.sum(self.bb_times), 'len', len(self.bb_times)
+            else:
+                print 'bbtimes    :', 0, 'total', 0, 'len', len(self.bb_times)
+
+            if len(self.gg_times) > 0:
+                print 'ggtimes    :', np.sum(self.gg_times) / len(self.gg_times), 'total', np.sum(self.gg_times), 'len', len(self.gg_times)
+            if len(self.sgg_times) > 0:
+                print 'sggtimes    :', np.sum(self.sgg_times) / len(self.sgg_times), 'total', np.sum(self.sgg_times), 'len', len(self.sgg_times)
+            if len(self.it_times) > 0:
+                print 'it_times    :', np.sum(self.it_times) / len(self.it_times), 'total', np.sum(self.it_times), 'len', len(self.it_times)
             print 'num vars   :', len(self.variables)
         else:
             pass
@@ -536,16 +540,19 @@ class FactorNode():
         r = None
         c = None
         if len(self.varset) == 1:
+            if self.graph.report_times: ub = time.time()
             #m = Message.new_message(self.varset[0].domain, 1.0 / len(self.varset[0].domain))
             #marginals = m.m
             #assert marginals.shape == self.potential_table.table.shape
             #beliefs = np.multiply(marginals, self.potential_table.table)  # O(n)
             beliefs = au.normalize(self.potential_table.table)  # todo: make this faster?
+            if self.graph.report_times: self.graph.ub_times.append(time.time() - ub)
         else:
+            if self.graph.report_times: bb = time.time()
             for v in self.varset:
                 vd = self.potential_table.var_id2dim[v.id]
                 m = self.graph.messages[str(v), str(self)]
-                m.renormalize()
+                #m.renormalize()
                 if vd == 0:
                     c = np.reshape(m.m, (np.size(m.m), 1))  # col vector
                 elif vd == 1:
@@ -571,6 +578,7 @@ class FactorNode():
                 pass
                 # if c[10, 0] != c[11, 0]:
                 #    print 'c not uniform...'
+            if self.graph.report_times: self.graph.bb_times.append(time.time() - bb)
         return beliefs
 
     def get_observed_factor_as_array(self):
@@ -590,11 +598,9 @@ class FactorNode():
 
 
     def get_gradient(self):
-        if self.graph.report_times: cg = time.time()
         g = self.cell_gradient()
         #g = self.cell_gradient_alt()
         #assert  np.allclose(g, g_alt)
-        if self.graph.report_times: self.graph.cg_times.append(time.time() - cg)
         if self.graph.report_times: sgg = time.time()
         if self.potential_table.observed_dim is not None:
             sparse_g = np.zeros(self.get_shape(), dtype=DTYPE)

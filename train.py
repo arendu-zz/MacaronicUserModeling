@@ -547,7 +547,7 @@ if __name__ == '__main__':
     else:
         tuning_instances = codecs.open(options.tuning_instances).readlines()
         if options.report_times:
-            tuning_instances = tuning_instances[:10]
+            tuning_instances = tuning_instances[10:20]
 
     #print 'reading in  ti observed freq...'
     #training_instances_observed_tf = np.loadtxt(options.ti_observed_tgf, dtype=DTYPE)
