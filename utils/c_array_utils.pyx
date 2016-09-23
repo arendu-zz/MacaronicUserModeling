@@ -135,8 +135,8 @@ cpdef sparse_dot(np.ndarray[np.float64_t, ndim=2] m1,  np.ndarray[np.float64_t, 
     cdef np.ndarray[np.int_t, ndim=1] m1_idx = np.empty(K, dtype=np.int)
     cdef np.ndarray[np.int_t, ndim=1] m2_idx = np.empty(K, dtype=np.int)
     cdef np.ndarray[np.float64_t, ndim=2] out = np.zeros((n,n), dtype=np.float)
-    m1_idx = np.argpartition(-m1, K, axis=0)[:K].ravel()
-    m2_idx = np.argpartition(-m2, K)[:, :K].ravel()
+    m1_idx = np.argpartition(-m1, K-1, axis=0)[:K].ravel()
+    m2_idx = np.argpartition(-m2, K-1)[:, :K].ravel()
     #out = np.zeros((n, n))
     out[np.ix_(m1_idx, m2_idx)] = np.dot(m1[m1_idx], m2[:, m2_idx])
     return out, m1_idx, m2_idx
@@ -201,6 +201,21 @@ cpdef set_original(phi, adapt_phi):
     r = range(0, np.shape(phi)[1])
     adapt_phi[:, r] = phi
     return adapt_phi
+
+
+cpdef sparse_vec_mat_dot(np.ndarray[np.float64_t, ndim=2]  vec, np.ndarray[np.float64_t, ndim=2] mat):
+    cdef int K = 100
+    cdef np.ndarray[np.int_t, ndim=1] m1_idx = np.empty(K, dtype=np.int)
+    if vec.shape[0] == 1:
+        # row vector
+        m_idx = np.argpartition(-vec[0,:], K-1)[:K]
+        r = np.dot(vec[0,m_idx], mat[m_idx,:])
+        return r
+    else:
+        #col vector
+        m_idx = np.argpartition(-vec[:,0], K-1)[:K]
+        r = np.dot(mat[:, m_idx], vec[m_idx])
+        return r
 
 
 if __name__ == '__main__':

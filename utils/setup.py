@@ -9,11 +9,11 @@ setup(
         include_dirs=[numpy.get_include()]
         )
 
-setup(
-        name='c LBP',
-        ext_modules=cythonize('c_LBP.pyx'),
-        include_dirs=[numpy.get_include()]
-        )
+#setup(
+#        name='c LBP',
+#        ext_modules=cythonize('c_LBP.pyx'),
+#        include_dirs=[numpy.get_include()]
+#        )
 
 
 # Build:
