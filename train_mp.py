@@ -157,6 +157,7 @@ def create_factor_graph(ti, learning_rate,
 
     fg.learning_rate = learning_rate
     fg.use_approx_beliefs = options.use_approx_beliefs 
+    fg.use_approx_inference = options.use_approx_inference
     fg.use_approx_gradient = options.use_approx_gradient
     fg.report_times = options.report_times
     fg.regularization_param = float(options.reg_param) / float(N) 
@@ -453,6 +454,7 @@ if __name__ == '__main__':
     opt.add_argument('--session_history', dest='session_history', default=False, action='store_true')
     opt.add_argument('--user_adapt', dest='user_adapt', default=False, action='store_true')
     opt.add_argument('--quick_predict', dest='quick_predict', default=False, action='store_true')
+    opt.add_argument('--use_approx_inference', dest='use_approx_inference' , default=False, action='store_true')
     opt.add_argument('--use_approx_beliefs', dest='use_approx_beliefs', default=False, action='store_true')
     opt.add_argument('--use_approx_gradient', dest='use_approx_gradient', default=False, action='store_true')
     opt.add_argument('--report_times', dest='report_times', default=False, action='store_true')
@@ -475,6 +477,7 @@ if __name__ == '__main__':
     print 'use experience adapt:', options.experience_adapt
     print 'use approx gradient', options.use_approx_gradient
     print 'use approx beliefs:', options.use_approx_beliefs
+    print 'use approx inference:', options.use_approx_inference
     print 'use history', options.history
     print 'use correct', options.use_correct_feat
     print 'use correct per l2 word', options.use_correct_feat_per_l2_word
@@ -556,7 +559,7 @@ if __name__ == '__main__':
     else:
         tuning_instances = codecs.open(options.tuning_instances).readlines()
         if options.report_times:
-            tuning_instances = tuning_instances[:10]
+            tuning_instances = tuning_instances[10:20]
 
     #print 'reading in  ti observed freq...'
     #training_instances_observed_tf = np.loadtxt(options.ti_observed_tgf, dtype=DTYPE)

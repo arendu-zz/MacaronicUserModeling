@@ -3,7 +3,7 @@ import sys
 import numpy as np
 from numpy import float64 as DTYPE
 import random
-import c_array_utils as au
+from utils import c_array_utils as au
 from scipy import sparse
 import pdb
 import time
@@ -50,6 +50,7 @@ class FactorGraph():
         self.gg_times = []
         self.sgg_times = []
         self.active_domains = {}
+        self.use_approx_inference = False
         self.use_approx_beliefs = False
         self.use_approx_gradient = False
         if isinstance(self.theta_en_en_names, tuple):
@@ -517,13 +518,19 @@ class FactorNode():
             if o_var_dim == 1:
                 # mul = np.multiply(msg.m.T, self.potential_table.table)
                 # marginalized = np.sum(mul, 1)
-                test_marginalized = np.dot(self.potential_table.table, msg.m)
+                if self.graph.use_approx_inference:
+                    test_marginalized = au.sparse_vec_mat_dot(msg.m, self.potential_table.table)
+                else:
+                    test_marginalized = np.dot(self.potential_table.table, msg.m)
                 # test_marginalized = np.reshape(test_marginalized, np.shape(marginalized))
                 # if __debug__: assert  np.allclose(test_marginalized, marginalized)
             else:
                 # mul = np.multiply(msg.m.T, self.potential_table.table.T).T
                 # marginalized = np.sum(mul, 0)
-                test_marginalized = np.dot(msg.m.T, self.potential_table.table)
+                if self.graph.use_approx_inference:
+                    test_marginalized = au.sparse_vec_mat_dot(msg.m.T, self.potential_table.table)
+                else:
+                    test_marginalized = np.dot(msg.m.T, self.potential_table.table)
                 # test_marginalized = np.reshape(test_marginalized, np.shape(marginalized))
                 # if __debug__: assert  np.allclose(test_marginalized, marginalized)
 
