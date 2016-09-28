@@ -9,21 +9,6 @@ from scipy import sparse
 np.set_printoptions(linewidth=300, precision=12)
 
 
-cdef class PhiWrapper:
-    def __init__(self, phi_en_en, phi_en_en_w1, phi_en_de):
-        self.phi_en_en = phi_en_en
-        self.phi_en_en_w1 = phi_en_en_w1
-        self.phi_en_de = phi_en_de
-
-
-cdef class ThetaWrapper:
-    def __init__(self, theta_en_en_names, theta_en_en, theta_en_de_names, theta_en_de):
-        self.theta_en_en_names = theta_en_en_names
-        self.theta_en_de_names = theta_en_de_names
-        self.theta_en_en = theta_en_en
-        self.theta_en_de = theta_en_de
-
-
 cpdef pointwise_multiply(m1, m2):
     #lm1 = np.log(m1)
     #lm2 = np.log(m2)
@@ -102,9 +87,11 @@ cpdef induce_s_multiply_threshold(s1, d2):
     return d2_trunc.dot(s1_trunc), s1_approx_nz
 
 
-cpdef dd_matrix_multiply(m1, m2):
+cpdef np.ndarray[np.float64_t, ndim=2]  dense_dot(np.ndarray[np.float64_t, ndim=2] m1, np.ndarray[np.float64_t, ndim=2] m2):
     return m1.dot(m2)
 
+cpdef np.ndarray[np.float64_t, ndim=2]  dense_pointwise_multiply(np.ndarray[np.float64_t, ndim=2] m1, np.ndarray[np.float64_t, ndim=2] m2):
+    return np.multiply(m1, m2)
 
 cpdef make_sparse_and_dot(m1, m2):
     cdef int K = 100

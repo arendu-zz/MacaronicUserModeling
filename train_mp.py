@@ -6,12 +6,11 @@ import json
 import numpy as np
 import sys
 import argparse
-from LBP import FactorNode, FactorGraph, VariableNode, VAR_TYPE_PREDICTED, PotentialTable, VAR_TYPE_GIVEN
+from LBP import FactorNode, FactorGraph, VariableNode, VAR_TYPE_PREDICTED, PotentialTable, VAR_TYPE_GIVEN,PhiWrapper
 from time import ctime
 import codecs
 from numpy import float64 as DTYPE
 from multiprocessing import Pool, Lock
-from array_utils import PhiWrapper
 
 global f_en_en_theta, f_en_de_theta, train_prediction_probs, intermediate_writer, prediction_str, final_writer, n_up
 global lock
@@ -552,7 +551,7 @@ if __name__ == '__main__':
     print 'reading in  ti and domains...'
     training_instances = codecs.open(options.training_instances).readlines()
     if options.report_times:
-        training_instances = training_instances[:20]
+        training_instances = training_instances[:10]
 
     if options.tuning_instances == '':
         tuning_instances = None

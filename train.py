@@ -6,11 +6,10 @@ import json
 import numpy as np
 import sys
 import argparse
-from LBP import FactorNode, FactorGraph, VariableNode, VAR_TYPE_PREDICTED, PotentialTable, VAR_TYPE_GIVEN
+from LBP import FactorNode, FactorGraph, VariableNode, VAR_TYPE_PREDICTED, PotentialTable, VAR_TYPE_GIVEN, PhiWrapper
 from time import ctime
 import codecs
 from numpy import float64 as DTYPE
-from array_utils import PhiWrapper
 
 global f_en_en_theta, f_en_de_theta, train_prediction_probs, intermediate_writer, prediction_str, final_writer, n_up
 global options
@@ -543,14 +542,14 @@ if __name__ == '__main__':
     print 'reading in  ti and domains...'
     training_instances = codecs.open(options.training_instances).readlines()
     if options.report_times:
-        training_instances = training_instances[:100]
+        training_instances = training_instances[:10]
 
     if options.tuning_instances == '':
         tuning_instances = None
     else:
         tuning_instances = codecs.open(options.tuning_instances).readlines()
         if options.report_times:
-            tuning_instances = tuning_instances[100:120]
+            tuning_instances = tuning_instances[10:20]
 
     #print 'reading in  ti observed freq...'
     #training_instances_observed_tf = np.loadtxt(options.ti_observed_tgf, dtype=DTYPE)

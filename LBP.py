@@ -3,7 +3,7 @@ import sys
 import numpy as np
 from numpy import float64 as DTYPE
 import random
-from utils import c_array_utils as au
+from array_utils import c_array_utils as au
 from scipy import sparse
 import pdb
 import time
@@ -521,7 +521,7 @@ class FactorNode():
                 if self.graph.use_approx_inference:
                     test_marginalized = au.sparse_vec_mat_dot(msg.m, self.potential_table.table)
                 else:
-                    test_marginalized = np.dot(self.potential_table.table, msg.m)
+                    test_marginalized = au.dense_dot(self.potential_table.table, msg.m)
                 # test_marginalized = np.reshape(test_marginalized, np.shape(marginalized))
                 # if __debug__: assert  np.allclose(test_marginalized, marginalized)
             else:
@@ -530,7 +530,7 @@ class FactorNode():
                 if self.graph.use_approx_inference:
                     test_marginalized = au.sparse_vec_mat_dot(msg.m.T, self.potential_table.table)
                 else:
-                    test_marginalized = np.dot(msg.m.T, self.potential_table.table)
+                    test_marginalized = au.dense_dot(msg.m.T, self.potential_table.table)
                 # test_marginalized = np.reshape(test_marginalized, np.shape(marginalized))
                 # if __debug__: assert  np.allclose(test_marginalized, marginalized)
 
@@ -578,9 +578,9 @@ class FactorNode():
                 beliefs = au.sparse_normalize(beliefs, c_idx, r_idx)
             else:
                 #sys.stderr.write('-')
-                marginals = au.dd_matrix_multiply(c, r)  # np.dot(c, r)
+                marginals = au.dense_dot(c, r)  # np.dot(c, r)
                 #assert marginals.shape == self.potential_table.table.shape
-                beliefs = np.multiply(marginals, self.potential_table.table)  # O(n)
+                beliefs = au.dense_pointwise_multiply(marginals, self.potential_table.table)  # O(n)
                 beliefs = au.normalize(beliefs)
                 pass
                 # if c[10, 0] != c[11, 0]:
@@ -745,3 +745,20 @@ def pointwise_multiply(m1, m2):
         # if __debug__: assert  np.abs(np.sum(m1.m) - 1) < 1e-5
         new_m = au.pointwise_multiply(m1.m, m2.m)
     return Message(new_m)
+
+class PhiWrapper:
+    def __init__(self, phi_en_en, phi_en_en_w1, phi_en_de):
+        self.phi_en_en = phi_en_en
+        self.phi_en_en_w1 = phi_en_en_w1
+        self.phi_en_de = phi_en_de
+
+
+class ThetaWrapper(object):
+
+    def __init__(self, theta_en_en_names, theta_en_en, theta_en_de_names, theta_en_de):
+        self.theta_en_en_names = theta_en_en_names
+        self.theta_en_de_names = theta_en_de_names
+        self.theta_en_en = theta_en_en
+        self.theta_en_de = theta_en_de
+
+
