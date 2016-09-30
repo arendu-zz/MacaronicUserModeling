@@ -206,11 +206,11 @@ class FactorGraph():
                 # todo: this check above is not comprehensive must check if dimsion of the potential table
             # todo: matches in the correct order of variables given by var_id2dim
             if len(f.varset) == 1:
-                self.messages[str(f), str(f.varset[0])] = Message.new_message(f.varset[0].domain,1.0)
+                self.messages[str(f), str(f.varset[0])] = Message.new_message(f.varset[0].domain,1.0 / len(f.varset[0].domain))
             else:
                 for v in f.varset:
-                    self.messages[str(v), str(f)] = Message.new_message(v.domain, 1.0)
-                    self.messages[str(f), str(v)] = Message.new_message(v.domain, 1.0)
+                    self.messages[str(v), str(f)] = Message.new_message(v.domain, 1.0 / len(v.domain))
+                    self.messages[str(f), str(v)] = Message.new_message(v.domain, 1.0  / len(v.domain))
 
     def treelike_inference(self, iterations):
         iterations = iterations if self.isLoopy else 1
@@ -387,7 +387,7 @@ class VariableNode():
 
 
     def get_marginal(self):
-        new_m = Message.new_message(self.domain, 1.0)
+        new_m = Message.new_message(self.domain, 1.0/ len(self.domain))
         for fc in self.facset:
             m = self.graph.messages[str(fc), str(self)]  # incoming message
             new_m = pointwise_multiply(m, new_m)
