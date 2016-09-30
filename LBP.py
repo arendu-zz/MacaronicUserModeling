@@ -3,7 +3,7 @@ import sys
 import numpy as np
 from numpy import float64 as DTYPE
 import random
-from array_utils import c_array_utils_64 as au
+from array_utils import c_array_utils as au
 from scipy import sparse
 import pdb
 import time

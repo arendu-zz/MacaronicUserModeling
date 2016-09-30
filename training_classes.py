@@ -1,5 +1,5 @@
 __author__ = 'arenduchintala'
-from editdistance import EditDistance
+from utils.editdistance import EditDistance
 import enchant
 import sys
 import pdb
