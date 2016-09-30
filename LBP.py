@@ -216,33 +216,29 @@ class FactorGraph():
         iterations = iterations if self.isLoopy else 1
         for _ in range(iterations):
             if self.report_times: it = time.time()
-            #print 'inference iterations', _
+            # print 'inference iterations', _
             _rand_key = random.sample(self.variables.keys(), 1)[0]
             _root = self.variables[_rand_key]
             _schedule = self.get_message_schedule(_root)
-            #print 'leaves to root...', str(_root)
+            # print 'leaves to root...', str(_root)
             for frm, to in reversed(_schedule):
                 if isinstance(to, FactorNode) and len(to.varset) < 2:
                     pass
                 else:
-                    #print 'send msg', str(frm), '->', str(to)
+                    # print 'send msg', str(frm), '->', str(to)
                     #sys.stderr.write('0-')
                     frm.update_message_to(to)
                     #sys.stderr.write('-0')
-            #print 'root to leaves...', str(_root)
+            # print 'root to leaves...', str(_root)
             for to, frm in _schedule:
                 if isinstance(to, FactorNode) and len(to.varset) < 2:
                     pass
                 else:
-                    #print 'send msg', str(frm), '->', str(to)
+                    # print 'send msg', str(frm), '->', str(to)
                     #sys.stderr.write('1-')
                     frm.update_message_to(to)
                     #sys.stderr.write('-1')
             if self.report_times: self.it_times.append(time.time() - it)
-
-        #for m_key in self.messages:
-        #    self.messages[m_key].renormalize()
-
         return True
 
     def get_posterior_probs(self):
@@ -379,17 +375,16 @@ class VariableNode():
         if __debug__: assert isinstance(fc, FactorNode)
         if __debug__: assert fc in self.facset
         #sys.stderr.write('~')
-        new_m = Message.new_message(self.domain, 1.0)
+        new_m = Message.new_message(self.domain, 1.0 / len(self.domain))
         for other_fc in self.facset:
             if other_fc is not fc:
                 m = self.graph.messages[str(other_fc), str(self)]  # from other factors to this variable
-                #print np.max(m.m), np.min(m.m)
                 new_m = pointwise_multiply(m, new_m)
-
                 if __debug__: assert np.shape(new_m.m) == np.shape(m.m)
         if self.graph.normalize_messages:
             new_m.renormalize()
         self.graph.messages[str(self), str(fc)] = new_m
+
 
     def get_marginal(self):
         new_m = Message.new_message(self.domain, 1.0)
@@ -663,10 +658,9 @@ class Message():
         if __debug__: assert isinstance(m, np.ndarray)
         if __debug__: assert np.size(m[m < 0.0]) == 0
         if np.shape(m) != (np.size(m), 1):
-            m = np.reshape(m, (np.size(m), 1))
+            self.m = np.reshape(m, (np.size(m), 1))
         else:
-            pass
-        self.m = np.nan_to_num(m)
+            self.m = m
 
     def __str__(self):
         return np.array_str(self.m)
@@ -681,12 +675,11 @@ class Message():
             e.fill(1.0 / np.size(self.m))
             self.m = e
         if __debug__: assert np.size(self.m[self.m < 0.0]) == 0
-        if __debug__: assert np.abs(np.sum(self.m) - 1.0) < 1e-5
+        if __debug__: assert np.abs(np.sum(self.m) - 1.0) < 1e-10
 
     @staticmethod
     def new_message(domain, init):
         m = np.empty((len(domain), 1))
-        #m = m * 1.0 / len(domain)
         m.fill(init)
         if m.dtype != DTYPE:
             m = m.astype(DTYPE)
