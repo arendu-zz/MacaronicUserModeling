@@ -5,7 +5,7 @@ from Cython.Build import cythonize
 import numpy 
 setup(
         name='c array utils',
-        ext_modules=cythonize('c_array_utils_64.pyx'),
+        ext_modules=cythonize('c_array_utils.pyx'),
         include_dirs=[numpy.get_include()]
         )
 
