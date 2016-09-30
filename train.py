@@ -24,7 +24,7 @@ prec_at_0 = 0
 prec_at_25 = 0
 prec_at_50 = 0
 prec_totals = 0
-np.seterr(divide='warn', over='warn',invalid='warn', under='warn')
+np.seterr(divide='raise', over='warn',invalid='warn', under='warn')
 
 np.set_printoptions(precision=4, suppress=True)
 
@@ -148,13 +148,12 @@ def create_factor_graph(ti, learning_rate,
                      theta_en_en=theta_en_en,
                      theta_en_de=theta_en_de,
                      phi_en_en=phi_wrapper.phi_en_en,
-                     phi_en_de=phi_wrapper.phi_en_de,
-                     phi_en_en_w1=phi_wrapper.phi_en_en_w1)
+                     phi_en_en_w1=phi_wrapper.phi_en_en_w1,
+                     phi_en_de=phi_wrapper.phi_en_de)
 
     fg.learning_rate = learning_rate
     fg.use_approx_beliefs = options.use_approx_beliefs 
     fg.use_approx_inference = options.use_approx_inference
-    fg.use_approx_gradient = options.use_approx_gradient
     fg.report_times = options.report_times
     fg.regularization_param = float(options.reg_param) / float(N) 
 
@@ -183,9 +182,8 @@ def create_factor_graph(ti, learning_rate,
                 correct_feature[i,j] += 1.00
             else:
                 pass
-        correct_feature = np.reshape(correct_feature, (np.shape(fg.phi_en_de)[0],))
-        #print np.shape(fg.phi_en_de)
-        fg.phi_en_de[:, -3] = correct_feature
+        feat_index = theta_en_de_names.index('correct')
+        fg.phi_en_de[:,:, feat_index] = correct_feature
     else:
         pass
 
@@ -197,8 +195,9 @@ def create_factor_graph(ti, learning_rate,
             history_feature[i, :] -= 0.00
             history_feature[:, j] -= 0.00
             history_feature[i, j] += 1.00
-        history_feature = np.reshape(history_feature, (np.shape(fg.phi_en_de)[0],))
-        fg.phi_en_de[:, -2] = history_feature
+        #history_feature = np.reshape(history_feature, (np.shape(fg.phi_en_de)[0],))
+        feat_index = theta_en_de_names.index('full_history')
+        fg.phi_en_de[:,:, feat_index] = history_feature
     else:
         pass
 
@@ -211,34 +210,47 @@ def create_factor_graph(ti, learning_rate,
                 incorrect_history[i, j] -= 1.00
                 # if it was close then give some positive weight for close words
                 # for that i need to precompute closeness in my vocabulary
-        incorrect_history = np.reshape(incorrect_history, (np.shape(fg.phi_en_de)[0],))
-        fg.phi_en_de[:, -1] = incorrect_history
+        #incorrect_history = np.reshape(incorrect_history, (np.shape(fg.phi_en_de)[0],))
+        feat_index = theta_en_de_names.index('hit_history')
+        fg.phi_en_de[:,:, feat_index] = incorrect_history
 
-    theta_pmi = fg.theta_en_en[0, theta_en_en_names.index('pmi')]
-    pot_en_en = fg.phi_en_en * theta_pmi  # fg.phi_en_en.dot(fg.theta_en_en.T)
+    #theta_pmi = fg.theta_en_en[0, theta_en_en_names.index('pmi')]
+    pot_en_en = fg.phi_en_en.dot(fg.theta_en_en.T) 
+    pot_en_en_w1 = fg.phi_en_en_w1.dot(fg.theta_en_en.T)
 
-    theta_pmi_w1 = fg.theta_en_en[0, theta_en_en_names.index('pmi_w1')]
-    pot_en_en_w1 = fg.phi_en_en_w1 * theta_pmi_w1  # fg.phi_en_en_w1.dot(fg.theta_en_en.T)
+    #theta_pmi_w1 = fg.theta_en_en[0, theta_en_en_names.index('pmi_w1')]
+    #pot_en_en_w1 = fg.phi_en_en_w1 * theta_pmi_w1  # fg.phi_en_en_w1.dot(fg.theta_en_en.T)
 
     for ft, d in fg.active_domains:
         if ft == 'en_en':
             t = d2t[ft, d]
-            d_pmi = t[0, theta_en_en_names.index('pmi')]
-            pot_en_en += fg.phi_en_en * d_pmi
-            d_pmi_w1 = t[0, theta_en_en_names.index('pmi_w1')]
-            pot_en_en_w1 += fg.phi_en_en_w1 * d_pmi_w1
+            #pot_en_en = np.sum(fg.phi_en_en * t, axis=2)  #theta_pmi  # fg.phi_en_en.dot(fg.theta_en_en.T)
+            pot_en_en = fg.phi_en_en.dot(t)
+            #d_pmi = t[0, theta_en_en_names.index('pmi')]
+            #pot_en_en += fg.phi_en_en * d_pmi
+            #d_pmi_w1 = t[0, theta_en_en_names.index('pmi_w1')]
+            #pot_en_en_w1 += fg.phi_en_en_w1 * d_pmi_w1
 
+    if __debug__: assert pot_en_en.shape == (len(en_domain), len(en_domain), 1)
+    pot_en_en = np.reshape(pot_en_en, (len(en_domain), len(en_domain))) # convert pot from (Ev, Ev, 1) to (Ev, Ev)
 
     pot_en_de = fg.phi_en_de.dot(fg.theta_en_de.T)
 
     for ft, d in fg.active_domains:
         if ft == 'en_de':
             t = d2t[ft, d]
-            pot_en_de += fg.phi_en_de.dot(t.T)
+            pot_en_de = fg.phi_en_de.dot(t.T)
+            #pot_en_de += fg.phi_en_de.dot(t.T)
 
+    if __debug__: assert pot_en_de.shape == (len(en_domain), len(de_domain), 1)
+    pot_en_de = np.reshape(pot_en_de, (len(en_domain), len(de_domain)))
+
+    pot_en_de += 1.0
+    pot_en_en += 1.0
+    pot_en_en_w1 += 1.0
     fg.pot_en_de = np.exp(pot_en_de)
-    fg.pot_en_en_w1 = np.exp(pot_en_en_w1)
     fg.pot_en_en = np.exp(pot_en_en)
+    fg.pot_en_en_w1 = np.exp(pot_en_en_w1)
     # create Ve x Vg factors
     for v, simplenode in var_node_pairs:
         if v.var_type == VAR_TYPE_PREDICTED:
@@ -322,10 +334,7 @@ def batch_predictions(training_instance,
     else:
         fgs = '\n'.join(['*SENT_ID:' + str(sent_id)] + fg.to_string())
         factor_dist = fg.to_dist()
-    try:
-        p0,p25, p50, t = fg.get_precision_counts()
-    except Exception as err:
-        print str(err)
+    p0,p25, p50, t = fg.get_precision_counts()
     return [p, fgs, factor_dist, (p0, p25, p50,t)]
 
 
@@ -440,13 +449,12 @@ if __name__ == '__main__':
     opt.add_argument('--save_params', dest='save_params_file', default='')
     opt.add_argument('--load_params', dest='load_params_file', default='')
     opt.add_argument('--save_predictions', dest='save_predictions_file', default='')
-    opt.add_argument('--history', dest='history', default=False, action='store_true')
+    opt.add_argument('--history', dest='history', default=True, action='store_true')
     opt.add_argument('--session_history', dest='session_history', default=False, action='store_true')
     opt.add_argument('--user_adapt', dest='user_adapt', default=False, action='store_true')
     opt.add_argument('--quick_predict', dest='quick_predict', default=False, action='store_true')
     opt.add_argument('--use_approx_inference', dest='use_approx_inference' , default=False, action='store_true')
     opt.add_argument('--use_approx_beliefs', dest='use_approx_beliefs', default=False, action='store_true')
-    opt.add_argument('--use_approx_gradient', dest='use_approx_gradient', default=False, action='store_true')
     opt.add_argument('--report_times', dest='report_times', default=False, action='store_true')
     opt.add_argument('--experience_adapt', dest='experience_adapt', default=False, action='store_true')
     opt.add_argument('--use_correct_feat', dest='use_correct_feat', default=True, action='store_true')
@@ -465,7 +473,6 @@ if __name__ == '__main__':
     print 'report times:', options.report_times 
     print 'user adapt:', options.user_adapt
     print 'use experience adapt:', options.experience_adapt
-    print 'use approx gradient', options.use_approx_gradient
     print 'use approx beliefs:', options.use_approx_beliefs
     print 'use approx inference:', options.use_approx_inference
     print 'use history', options.history
@@ -500,6 +507,7 @@ if __name__ == '__main__':
     if mode == 'training' and options.load_params_file == '':
         print 'training from zero params'
         f_en_en_names = ['pmi', 'pmi_w1']
+        #f_en_en_names = ['pmi', 'bias']
         f_en_en_theta = np.zeros((1, len(f_en_en_names)), dtype=DTYPE)
         #f_en_de_names = ['ed', 'ped', 'length','wordfreq', 'full_history', 'hit_history'] #removed length and word freq
         f_en_de_names = ['ed', 'ped','correct',  'full_history', 'hit_history']
@@ -579,31 +587,35 @@ if __name__ == '__main__':
 
     print 'reading phi pmi'
     phi_en_en1 = np.loadtxt(options.phi_pmi, dtype=DTYPE)
-    phi_en_en1 = np.reshape(phi_en_en1, (len(en_domain) * len(en_domain), 1))
-    phi_en_en = np.concatenate((phi_en_en1,), axis=1)
-    phi_en_en = phi_en_en.astype(DTYPE)
+    #phi_en_en1 = np.reshape(phi_en_en1, (len(en_domain) * len(en_domain), 1))
     print 'reading phi pmi w1'
     phi_en_en_w1 = np.loadtxt(options.phi_pmi_w1, dtype=DTYPE)
-    phi_en_en_w1 = np.reshape(phi_en_en1, (len(en_domain) * len(en_domain), 1))
-    phi_en_en_w1 = phi_en_en_w1.astype(DTYPE)
+    #phi_en_en_w1 = np.zeros_like(phi_en_en1) #np.loadtxt(options.phi_pmi_w1, dtype=DTYPE)
+    #phi_en_en_w1 = np.reshape(phi_en_en_w1, (len(en_domain) * len(en_domain), 1))
+    #phi_en_en_w1 = phi_en_en_w1.astype(DTYPE)
+    #phi_en_en_bias = np.ones_like(phi_en_en1)  # place holder for bias
+
+    phi_en_en = np.stack([phi_en_en1, phi_en_en_w1], axis=2)
+    phi_en_en = phi_en_en.astype(DTYPE)
 
     print 'reading phi ed'
     phi_en_de1 = np.loadtxt(options.phi_ed, dtype=DTYPE)
-    phi_en_de1 = np.reshape(phi_en_de1, (len(en_domain) * len(de_domain), 1))
+    #phi_en_de1 = np.reshape(phi_en_de1, (len(en_domain) * len(de_domain), 1))
 
     print 'reading phi ped'
     phi_en_de2 = np.loadtxt(options.phi_ped, dtype=DTYPE)
-    phi_en_de2 = np.reshape(phi_en_de2, (len(en_domain) * len(de_domain), 1))
+    #phi_en_de2 = np.reshape(phi_en_de2, (len(en_domain) * len(de_domain), 1))
 
     #print 'reading egt..'
     #egt_mat = np.loadtxt(options.egt, dtype=DTYPE)
     phi_en_de3 = np.zeros_like(phi_en_de1)  # place holder for correct
     phi_en_de4 = np.zeros_like(phi_en_de1)  # place holder for history 
     phi_en_de5 = np.zeros_like(phi_en_de1)  # place holder for incorrect history
-    phi_en_de = np.concatenate((phi_en_de1, phi_en_de2, phi_en_de3, phi_en_de4, phi_en_de5), axis=1)
+    phi_en_de_bias = np.ones_like(phi_en_de1)  # place holder for bias
+    phi_en_de = np.stack([phi_en_de1, phi_en_de2, phi_en_de3, phi_en_de4, phi_en_de5], axis=2)
     phi_en_de = phi_en_de.astype(DTYPE)
 
-    phi_wrapper = PhiWrapper(phi_en_en, phi_en_en_w1, phi_en_de)
+    phi_wrapper = PhiWrapper(phi_en_en, phi_en_de)
     t_now = '-'.join(ctime().split())
     model_param_writer_name = options.training_instances + '.cpu' + str(cpu_count) + '.' + t_now + '.params'
     intermediate_writer = open(model_param_writer_name + '.tmp', 'w')
@@ -614,7 +626,7 @@ if __name__ == '__main__':
             lr = init_lr / float(1.0 + (epoch * 0.3))
             train_prediction_probs = 0.0
             #print 'epoch:', epoch
-            random.shuffle(training_instances)
+            #random.shuffle(training_instances)
             for ti in training_instances:
                 result = batch_sgd(
                     ti,

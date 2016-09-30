@@ -3,7 +3,7 @@ import sys
 import numpy as np
 from numpy import float64 as DTYPE
 import random
-from array_utils import c_array_utils as au
+from array_utils import c_array_utils_64 as au
 from scipy import sparse
 import pdb
 import time
@@ -23,8 +23,8 @@ class FactorGraph():
                  theta_en_en,
                  theta_en_de,
                  phi_en_en,
-                 phi_en_de,
-                 phi_en_en_w1):
+                 phi_en_en_w1,
+                 phi_en_de):
         self.theta_en_en = theta_en_en
         self.theta_en_de = theta_en_de
         self.theta_en_en_names = theta_en_en_names,
@@ -34,7 +34,6 @@ class FactorGraph():
         self.phi_en_de = phi_en_de
         self.pot_en_en = None
         self.pot_en_en_w1 = None
-        self.pot_en_en_clamp = None
         self.pot_en_de = None
         self.variables = {}
         self.factors = []
@@ -52,7 +51,6 @@ class FactorGraph():
         self.active_domains = {}
         self.use_approx_inference = False
         self.use_approx_beliefs = False
-        self.use_approx_gradient = False
         if isinstance(self.theta_en_en_names, tuple):
             self.theta_en_en_names = self.theta_en_en_names[0]
         if isinstance(self.theta_en_de_names, tuple):
@@ -211,47 +209,52 @@ class FactorGraph():
                 # todo: this check above is not comprehensive must check if dimsion of the potential table
             # todo: matches in the correct order of variables given by var_id2dim
             if len(f.varset) == 1:
-                self.messages[str(f), str(f.varset[0])] = Message.new_message(f.varset[0].domain,
-                                                                              1.0 / len(f.varset[0].domain))
+                self.messages[str(f), str(f.varset[0])] = Message.new_message(f.varset[0].domain,1.0)
             else:
                 for v in f.varset:
-                    self.messages[str(v), str(f)] = Message.new_message(v.domain, 1.0 / float(len(v.domain)))
-                    self.messages[str(f), str(v)] = Message.new_message(v.domain, 1.0 / len(v.domain))
+                    self.messages[str(v), str(f)] = Message.new_message(v.domain, 1.0)
+                    self.messages[str(f), str(v)] = Message.new_message(v.domain, 1.0)
 
     def treelike_inference(self, iterations):
         iterations = iterations if self.isLoopy else 1
         for _ in range(iterations):
             if self.report_times: it = time.time()
-            # print 'inference iterations', _
+            #print 'inference iterations', _
             _rand_key = random.sample(self.variables.keys(), 1)[0]
             _root = self.variables[_rand_key]
             _schedule = self.get_message_schedule(_root)
-            # print 'leaves to root...', str(_root)
+            #print 'leaves to root...', str(_root)
             for frm, to in reversed(_schedule):
                 if isinstance(to, FactorNode) and len(to.varset) < 2:
                     pass
                 else:
-                    # print 'send msg', str(frm), '->', str(to)
+                    #print 'send msg', str(frm), '->', str(to)
                     #sys.stderr.write('0-')
                     frm.update_message_to(to)
                     #sys.stderr.write('-0')
-            # print 'root to leaves...', str(_root)
+            #print 'root to leaves...', str(_root)
             for to, frm in _schedule:
                 if isinstance(to, FactorNode) and len(to.varset) < 2:
                     pass
                 else:
-                    # print 'send msg', str(frm), '->', str(to)
+                    #print 'send msg', str(frm), '->', str(to)
                     #sys.stderr.write('1-')
                     frm.update_message_to(to)
                     #sys.stderr.write('-1')
             if self.report_times: self.it_times.append(time.time() - it)
+
+        #for m_key in self.messages:
+        #    self.messages[m_key].renormalize()
+
         return True
 
     def get_posterior_probs(self):
         log_posterior = 0.0
         for v_key, v in self.variables.iteritems():
             m = v.get_marginal()
+            #print m.m[v.supervised_label_index], np.max(m.m), np.min(m.m)
             _l = np.log(m.m[v.supervised_label_index])
+
             if _l == float('-inf'):
                 sys.stderr.write('err -inf' + str( m.m[v.supervised_label_index]))
                 log_posterior += -99.99
@@ -304,15 +307,16 @@ class FactorGraph():
         grad_en_en = np.zeros_like(self.theta_en_en, dtype=DTYPE)
         for f in self.factors:
             if f.factor_type == 'en_en':
-                gr = f.get_gradient()
-                if f.gap == 1:
-                    idx = self.theta_en_en_names.index('pmi_w1')
-                    grad_en_en[0, idx] += gr[0, 0]
-                elif f.gap is None or f.gap > 1:
-                    idx = self.theta_en_en_names.index('pmi')
-                    grad_en_en[0, idx] += gr[0, 0]
-                else:
-                    raise BaseException('unknown feature name')
+                #gr = f.get_gradient()
+                #if f.gap == 1:
+                #    idx = self.theta_en_en_names.index('pmi_w1')
+                #    grad_en_en[0, idx] += gr[0, 0]
+                #elif f.gap is None or f.gap > 1:
+                #    idx = self.theta_en_en_names.index('pmi')
+                #    grad_en_en[0, idx] += gr[0, 0]
+                #else:
+                #    raise BaseException('unknown feature name')
+                grad_en_en += f.get_gradient()
             elif f.factor_type == 'en_de':
                 grad_en_de += f.get_gradient()
             else:
@@ -378,21 +382,24 @@ class VariableNode():
         if __debug__: assert isinstance(fc, FactorNode)
         if __debug__: assert fc in self.facset
         #sys.stderr.write('~')
-        new_m = Message.new_message(self.domain, 1.0 / len(self.domain))
+        new_m = Message.new_message(self.domain, 1.0)
         for other_fc in self.facset:
             if other_fc is not fc:
                 m = self.graph.messages[str(other_fc), str(self)]  # from other factors to this variable
+                #print np.max(m.m), np.min(m.m)
                 new_m = pointwise_multiply(m, new_m)
+
                 if __debug__: assert np.shape(new_m.m) == np.shape(m.m)
         if self.graph.normalize_messages:
             new_m.renormalize()
         self.graph.messages[str(self), str(fc)] = new_m
 
     def get_marginal(self):
-        new_m = Message.new_message(self.domain, 1.0 / len(self.domain))
+        new_m = Message.new_message(self.domain, 1.0)
         for fc in self.facset:
             m = self.graph.messages[str(fc), str(self)]  # incoming message
             new_m = pointwise_multiply(m, new_m)
+        #new_m.m += 0.00001
         if self.graph.normalize_messages:
             new_m.renormalize()
         return new_m
@@ -402,7 +409,9 @@ class VariableNode():
         a = np.reshape(m.m, (np.size(m.m, )))
         max_idx = np.argpartition(a, -top)[-top:]
         max_idx = max_idx[np.argsort(a[max_idx])]
-        max_vocab = [(self.domain[i], '%0.4f' % np.log(a[i])) for i in max_idx]
+        #print 'max_v', np.min(a), np.max(a)
+        al = np.log(a)
+        max_vocab = [(self.domain[i], '%0.4f' % al[i]) for i in max_idx]
         max_vocab.reverse()
         return self.supervised_label, '%0.4f' % np.log(m.m[self.supervised_label_index]), max_vocab
 
@@ -457,6 +466,8 @@ class FactorNode():
                 return self.graph.pot_en_en_w1
             else:
                 raise BaseException("only 2 kinds of distances are supported ...")
+            #print self.graph.pot_en_en
+            #return self.graph.pot_en_en
         elif self.factor_type == 'en_de':
             return self.graph.pot_en_de
         else:
@@ -480,6 +491,7 @@ class FactorNode():
                 return self.graph.phi_en_en_w1
             else:
                 raise BaseException("only 2 distances supported at the moment")
+            #return self.graph.phi_en_en
         elif self.factor_type == 'en_de':
             return self.graph.phi_en_de
         else:
@@ -606,6 +618,7 @@ class FactorNode():
 
     def get_gradient(self):
         g = self.cell_gradient()
+        #print 'obs - exp shape' , g.shape, self.factor_type
         #g = self.cell_gradient_alt()
         #assert  np.allclose(g, g_alt)
         if self.graph.report_times: sgg = time.time()
@@ -621,14 +634,15 @@ class FactorNode():
         f_ij = np.reshape(g, (np.size(g), 1))
         if self.graph.report_times: gg = time.time()
         # print 'nz appx, orig, full :', np.count_nonzero(f_ij_approx), np.count_nonzero(f_ij), np.size(f_ij)
-        if self.graph.use_approx_gradient:
-            grad_approx = au.induce_s_mutliply_clip(f_ij, self.get_phi().T)
-            grad1 = grad_approx.T
-        else:
-            grad1 = (self.get_phi().T.dot(f_ij)).T
+        #print 'phi', self.get_phi().shape
+        gradd = np.tensordot(g, self.get_phi())
+        grad = np.reshape(gradd, (1, np.size(gradd)))
+        #print gradd.shape, gradd, self.factor_type
+        #pdb.set_trace()
+        #grad = (self.get_phi().T.dot(f_ij)).T
         # if __debug__: assert  np.allclose(grad1, grad2.T)
         if self.graph.report_times: self.graph.gg_times.append(time.time() - gg)
-        return grad1
+        return grad
 
     def cell_gradient(self):
         obs_counts = self.get_observed_factor()
@@ -657,9 +671,10 @@ class Message():
         if __debug__: assert isinstance(m, np.ndarray)
         if __debug__: assert np.size(m[m < 0.0]) == 0
         if np.shape(m) != (np.size(m), 1):
-            self.m = np.reshape(m, (np.size(m), 1))
+            m = np.reshape(m, (np.size(m), 1))
         else:
-            self.m = m
+            pass
+        self.m = np.nan_to_num(m)
 
     def __str__(self):
         return np.array_str(self.m)
@@ -674,12 +689,12 @@ class Message():
             e.fill(1.0 / np.size(self.m))
             self.m = e
         if __debug__: assert np.size(self.m[self.m < 0.0]) == 0
-        if __debug__: assert np.abs(np.sum(self.m) - 1.0) < 1e-10
+        if __debug__: assert np.abs(np.sum(self.m) - 1.0) < 1e-5
 
     @staticmethod
     def new_message(domain, init):
-        m = np.empty((len(domain), 1))
-        m.fill(init)
+        m = np.ones((len(domain), 1))
+        #m = m * 1.0 / len(domain)
         if m.dtype != DTYPE:
             m = m.astype(DTYPE)
         return Message(m)
@@ -714,6 +729,7 @@ class PotentialTable():
         table = self.factor.get_pot()
         # if __debug__: assert  np.allclose(table_from_pot, table)
         table_shape = self.factor.get_shape()
+        #print 'table shape', table_shape
         table = np.reshape(table, table_shape)
 
         if self.observed_dim is not None:
@@ -731,7 +747,6 @@ class PotentialTable():
         if __debug__: assert self.factor is None
         self.factor = factor
 
-
 def pointwise_multiply(m1, m2):
     if __debug__: assert isinstance(m1, Message)
     if __debug__: assert isinstance(m2, Message)
@@ -744,12 +759,15 @@ def pointwise_multiply(m1, m2):
         if __debug__: assert np.shape(m1.m) == np.shape(m2.m)
         # if __debug__: assert  np.abs(np.sum(m1.m) - 1) < 1e-5
         new_m = au.pointwise_multiply(m1.m, m2.m)
+        new_m = np.nan_to_num(new_m)
     return Message(new_m)
 
 class PhiWrapper:
-    def __init__(self, phi_en_en, phi_en_en_w1, phi_en_de):
+    def __init__(self, phi_en_en, phi_en_de):
         self.phi_en_en = phi_en_en
-        self.phi_en_en_w1 = phi_en_en_w1
+        self.phi_en_en_w1 = np.copy(self.phi_en_en)
+        self.phi_en_en[:,:,1] = 0
+        self.phi_en_en_w1[:,:,0] = 0
         self.phi_en_de = phi_en_de
 
 
