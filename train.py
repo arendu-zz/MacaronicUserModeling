@@ -24,7 +24,7 @@ prec_at_0 = 0
 prec_at_25 = 0
 prec_at_50 = 0
 prec_totals = 0
-np.seterr(divide='raise', over='warn',invalid='warn', under='warn')
+np.seterr(divide='warn', over='warn',invalid='warn', under='warn')
 
 np.set_printoptions(precision=4, suppress=True)
 
@@ -622,7 +622,7 @@ if __name__ == '__main__':
             lr = init_lr / float(1.0 + (epoch * 0.3))
             train_prediction_probs = 0.0
             #print 'epoch:', epoch
-            #random.shuffle(training_instances)
+            random.shuffle(training_instances)
             for ti in training_instances:
                 result = batch_sgd(
                     ti,
