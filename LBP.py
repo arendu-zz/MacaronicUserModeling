@@ -23,17 +23,14 @@ class FactorGraph():
                  theta_en_en,
                  theta_en_de,
                  phi_en_en,
-                 phi_en_en_w1,
                  phi_en_de):
         self.theta_en_en = theta_en_en
         self.theta_en_de = theta_en_de
         self.theta_en_en_names = theta_en_en_names,
         self.theta_en_de_names = theta_en_de_names,
         self.phi_en_en = phi_en_en
-        self.phi_en_en_w1 = phi_en_en_w1
         self.phi_en_de = phi_en_de
         self.pot_en_en = None
-        self.pot_en_en_w1 = None
         self.pot_en_de = None
         self.variables = {}
         self.factors = []
@@ -460,14 +457,14 @@ class FactorNode():
 
     def get_pot(self):
         if self.factor_type == 'en_en':
-            if self.gap > 1:
-                return self.graph.pot_en_en
-            elif self.gap == 1:
-                return self.graph.pot_en_en_w1
-            else:
-                raise BaseException("only 2 kinds of distances are supported ...")
+            #if self.gap > 1:
+            #    return self.graph.pot_en_en
+            #elif self.gap == 1:
+            #    return self.graph.pot_en_en_w1
+            #else:
+            #    raise BaseException("only 2 kinds of distances are supported ...")
             #print self.graph.pot_en_en
-            #return self.graph.pot_en_en
+            return self.graph.pot_en_en
         elif self.factor_type == 'en_de':
             return self.graph.pot_en_de
         else:
@@ -485,13 +482,13 @@ class FactorNode():
 
     def get_phi(self):
         if self.factor_type == 'en_en':
-            if self.gap > 1:
-                return self.graph.phi_en_en
-            elif self.gap == 1:
-                return self.graph.phi_en_en_w1
-            else:
-                raise BaseException("only 2 distances supported at the moment")
-            #return self.graph.phi_en_en
+            #if self.gap > 1:
+            #    return self.graph.phi_en_en
+            #elif self.gap == 1:
+            #    return self.graph.phi_en_en_w1
+            #else:
+            #    raise BaseException("only 2 distances supported at the moment")
+            return self.graph.phi_en_en
         elif self.factor_type == 'en_de':
             return self.graph.phi_en_de
         else:
@@ -622,25 +619,20 @@ class FactorNode():
         #g = self.cell_gradient_alt()
         #assert  np.allclose(g, g_alt)
         if self.graph.report_times: sgg = time.time()
-        if self.potential_table.observed_dim is not None:
-            sparse_g = np.zeros(self.get_shape(), dtype=DTYPE)
-            g = np.reshape(g, (np.size(g),))
-            sparse_g[:, self.potential_table.observed_dim] = g
-            g = sparse_g
-        else:
-            # g is already  a matrix
-            pass
         if self.graph.report_times: self.graph.sgg_times.append(time.time() - sgg)
-        f_ij = np.reshape(g, (np.size(g), 1))
         if self.graph.report_times: gg = time.time()
-        # print 'nz appx, orig, full :', np.count_nonzero(f_ij_approx), np.count_nonzero(f_ij), np.size(f_ij)
-        #print 'phi', self.get_phi().shape
-        gradd = np.tensordot(g, self.get_phi())
-        grad = np.reshape(gradd, (1, np.size(gradd)))
-        #print gradd.shape, gradd, self.factor_type
-        #pdb.set_trace()
-        #grad = (self.get_phi().T.dot(f_ij)).T
-        # if __debug__: assert  np.allclose(grad1, grad2.T)
+        if self.potential_table.observed_dim is not None:
+            #print g.shape, self.get_phi().shape
+            phi_g = self.get_phi()[:, self.potential_table.observed_dim, :]
+            grad = np.dot(g.T, phi_g)
+            #sparse_g = np.zeros(self.get_shape(), dtype=DTYPE)
+            #g = np.reshape(g, (np.size(g),))
+            #sparse_g[:, self.potential_table.observed_dim] = g
+            #g = sparse_g
+            
+        else:
+            grad = np.tensordot(g, self.get_phi())
+        grad = np.reshape(grad, (1, np.size(grad)))
         if self.graph.report_times: self.graph.gg_times.append(time.time() - gg)
         return grad
 
@@ -693,8 +685,9 @@ class Message():
 
     @staticmethod
     def new_message(domain, init):
-        m = np.ones((len(domain), 1))
+        m = np.empty((len(domain), 1))
         #m = m * 1.0 / len(domain)
+        m.fill(init)
         if m.dtype != DTYPE:
             m = m.astype(DTYPE)
         return Message(m)
@@ -765,9 +758,6 @@ def pointwise_multiply(m1, m2):
 class PhiWrapper:
     def __init__(self, phi_en_en, phi_en_de):
         self.phi_en_en = phi_en_en
-        self.phi_en_en_w1 = np.copy(self.phi_en_en)
-        self.phi_en_en[:,:,1] = 0
-        self.phi_en_en_w1[:,:,0] = 0
         self.phi_en_de = phi_en_de
 
 

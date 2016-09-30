@@ -148,7 +148,6 @@ def create_factor_graph(ti, learning_rate,
                      theta_en_en=theta_en_en,
                      theta_en_de=theta_en_de,
                      phi_en_en=phi_wrapper.phi_en_en,
-                     phi_en_en_w1=phi_wrapper.phi_en_en_w1,
                      phi_en_de=phi_wrapper.phi_en_de)
 
     fg.learning_rate = learning_rate
@@ -216,7 +215,6 @@ def create_factor_graph(ti, learning_rate,
 
     #theta_pmi = fg.theta_en_en[0, theta_en_en_names.index('pmi')]
     pot_en_en = fg.phi_en_en.dot(fg.theta_en_en.T) 
-    pot_en_en_w1 = fg.phi_en_en_w1.dot(fg.theta_en_en.T)
 
     #theta_pmi_w1 = fg.theta_en_en[0, theta_en_en_names.index('pmi_w1')]
     #pot_en_en_w1 = fg.phi_en_en_w1 * theta_pmi_w1  # fg.phi_en_en_w1.dot(fg.theta_en_en.T)
@@ -225,7 +223,7 @@ def create_factor_graph(ti, learning_rate,
         if ft == 'en_en':
             t = d2t[ft, d]
             #pot_en_en = np.sum(fg.phi_en_en * t, axis=2)  #theta_pmi  # fg.phi_en_en.dot(fg.theta_en_en.T)
-            pot_en_en = fg.phi_en_en.dot(t)
+            pot_en_en = fg.phi_en_en.dot(t.T)
             #d_pmi = t[0, theta_en_en_names.index('pmi')]
             #pot_en_en += fg.phi_en_en * d_pmi
             #d_pmi_w1 = t[0, theta_en_en_names.index('pmi_w1')]
@@ -245,12 +243,10 @@ def create_factor_graph(ti, learning_rate,
     if __debug__: assert pot_en_de.shape == (len(en_domain), len(de_domain), 1)
     pot_en_de = np.reshape(pot_en_de, (len(en_domain), len(de_domain)))
 
-    pot_en_de += 1.0
-    pot_en_en += 1.0
-    pot_en_en_w1 += 1.0
+    #pot_en_de += 1.0
+    #pot_en_en += 1.0
     fg.pot_en_de = np.exp(pot_en_de)
     fg.pot_en_en = np.exp(pot_en_en)
-    fg.pot_en_en_w1 = np.exp(pot_en_en_w1)
     # create Ve x Vg factors
     for v, simplenode in var_node_pairs:
         if v.var_type == VAR_TYPE_PREDICTED:
@@ -506,7 +502,7 @@ if __name__ == '__main__':
     mode = 'training' if options.save_predictions_file == '' else 'predicting'
     if mode == 'training' and options.load_params_file == '':
         print 'training from zero params'
-        f_en_en_names = ['pmi', 'pmi_w1']
+        f_en_en_names = ['pmi']
         #f_en_en_names = ['pmi', 'bias']
         f_en_en_theta = np.zeros((1, len(f_en_en_names)), dtype=DTYPE)
         #f_en_de_names = ['ed', 'ped', 'length','wordfreq', 'full_history', 'hit_history'] #removed length and word freq
@@ -595,7 +591,7 @@ if __name__ == '__main__':
     #phi_en_en_w1 = phi_en_en_w1.astype(DTYPE)
     #phi_en_en_bias = np.ones_like(phi_en_en1)  # place holder for bias
 
-    phi_en_en = np.stack([phi_en_en1, phi_en_en_w1], axis=2)
+    phi_en_en = np.stack([phi_en_en1], axis=2)
     phi_en_en = phi_en_en.astype(DTYPE)
 
     print 'reading phi ed'
