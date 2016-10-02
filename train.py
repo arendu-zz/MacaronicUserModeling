@@ -148,6 +148,7 @@ def create_factor_graph(ti, learning_rate,
                      theta_en_en=theta_en_en,
                      theta_en_de=theta_en_de,
                      phi_en_en=phi_wrapper.phi_en_en,
+                     phi_en_en_w1=phi_wrapper.phi_en_en_w1,
                      phi_en_de=phi_wrapper.phi_en_de)
 
     fg.learning_rate = learning_rate
@@ -215,6 +216,7 @@ def create_factor_graph(ti, learning_rate,
 
     #theta_pmi = fg.theta_en_en[0, theta_en_en_names.index('pmi')]
     pot_en_en = fg.phi_en_en.dot(fg.theta_en_en.T) 
+    pot_en_en_w1 = fg.phi_en_en_w1.dot(fg.theta_en_en.T) 
 
     #theta_pmi_w1 = fg.theta_en_en[0, theta_en_en_names.index('pmi_w1')]
     #pot_en_en_w1 = fg.phi_en_en_w1 * theta_pmi_w1  # fg.phi_en_en_w1.dot(fg.theta_en_en.T)
@@ -224,13 +226,16 @@ def create_factor_graph(ti, learning_rate,
             t = d2t[ft, d]
             #pot_en_en = np.sum(fg.phi_en_en * t, axis=2)  #theta_pmi  # fg.phi_en_en.dot(fg.theta_en_en.T)
             pot_en_en = fg.phi_en_en.dot(t.T)
+            pot_en_en_w1 = fg.phi_en_en_w1.dot(t.T)
             #d_pmi = t[0, theta_en_en_names.index('pmi')]
             #pot_en_en += fg.phi_en_en * d_pmi
             #d_pmi_w1 = t[0, theta_en_en_names.index('pmi_w1')]
             #pot_en_en_w1 += fg.phi_en_en_w1 * d_pmi_w1
 
     if __debug__: assert pot_en_en.shape == (len(en_domain), len(en_domain), 1)
+    if __debug__: assert pot_en_en_w1.shape == (len(en_domain), len(en_domain), 1)
     pot_en_en = np.reshape(pot_en_en, (len(en_domain), len(en_domain))) # convert pot from (Ev, Ev, 1) to (Ev, Ev)
+    pot_en_en_w1 = np.reshape(pot_en_en_w1, (len(en_domain), len(en_domain))) # convert pot from (Ev, Ev, 1) to (Ev, Ev)
 
     pot_en_de = fg.phi_en_de.dot(fg.theta_en_de.T)
 
@@ -243,10 +248,9 @@ def create_factor_graph(ti, learning_rate,
     if __debug__: assert pot_en_de.shape == (len(en_domain), len(de_domain), 1)
     pot_en_de = np.reshape(pot_en_de, (len(en_domain), len(de_domain)))
 
-    #pot_en_de += 1.0
-    #pot_en_en += 1.0
     fg.pot_en_de = np.exp(pot_en_de)
     fg.pot_en_en = np.exp(pot_en_en)
+    fg.pot_en_en_w1 = np.exp(pot_en_en_w1)
     # create Ve x Vg factors
     for v, simplenode in var_node_pairs:
         if v.var_type == VAR_TYPE_PREDICTED:
@@ -502,11 +506,11 @@ if __name__ == '__main__':
     mode = 'training' if options.save_predictions_file == '' else 'predicting'
     if mode == 'training' and options.load_params_file == '':
         print 'training from zero params'
-        f_en_en_names = ['pmi']
-        #f_en_en_names = ['pmi', 'bias']
+        #f_en_en_names = ['pmi']
+        f_en_en_names = ['pmi','pmi_w1', 'bias']
         f_en_en_theta = np.zeros((1, len(f_en_en_names)), dtype=DTYPE)
         #f_en_de_names = ['ed', 'ped', 'length','wordfreq', 'full_history', 'hit_history'] #removed length and word freq
-        f_en_de_names = ['ed', 'ped','correct',  'full_history', 'hit_history']
+        f_en_de_names = ['ed', 'ped','correct',  'full_history', 'hit_history', 'bias']
         f_en_de_theta = np.zeros((1, len(f_en_de_names)), dtype=DTYPE)
         domain2theta = {}
         for d in domains:
@@ -583,35 +587,30 @@ if __name__ == '__main__':
 
     print 'reading phi pmi'
     phi_en_en1 = np.loadtxt(options.phi_pmi, dtype=DTYPE)
-    #phi_en_en1 = np.reshape(phi_en_en1, (len(en_domain) * len(en_domain), 1))
     print 'reading phi pmi w1'
     phi_en_en_w1 = np.loadtxt(options.phi_pmi_w1, dtype=DTYPE)
-    #phi_en_en_w1 = np.zeros_like(phi_en_en1) #np.loadtxt(options.phi_pmi_w1, dtype=DTYPE)
-    #phi_en_en_w1 = np.reshape(phi_en_en_w1, (len(en_domain) * len(en_domain), 1))
-    #phi_en_en_w1 = phi_en_en_w1.astype(DTYPE)
-    #phi_en_en_bias = np.ones_like(phi_en_en1)  # place holder for bias
+    phi_en_en_bias = np.ones_like(phi_en_en1)  # place holder for bias
 
-    phi_en_en = np.stack([phi_en_en1], axis=2)
-    phi_en_en = phi_en_en.astype(DTYPE)
+    T_phi_en_en_w1 = np.stack([phi_en_en1, phi_en_en_w1, phi_en_en_bias], axis=2)
+    T_phi_en_en = np.stack([phi_en_en1, np.zeros_like(phi_en_en1), phi_en_en_bias], axis=2)
+    T_phi_en_en = T_phi_en_en.astype(DTYPE)
+    T_phi_en_en_w1 = T_phi_en_en_w1.astype(DTYPE)
 
     print 'reading phi ed'
     phi_en_de1 = np.loadtxt(options.phi_ed, dtype=DTYPE)
-    #phi_en_de1 = np.reshape(phi_en_de1, (len(en_domain) * len(de_domain), 1))
 
     print 'reading phi ped'
     phi_en_de2 = np.loadtxt(options.phi_ped, dtype=DTYPE)
-    #phi_en_de2 = np.reshape(phi_en_de2, (len(en_domain) * len(de_domain), 1))
 
-    #print 'reading egt..'
-    #egt_mat = np.loadtxt(options.egt, dtype=DTYPE)
     phi_en_de3 = np.zeros_like(phi_en_de1)  # place holder for correct
     phi_en_de4 = np.zeros_like(phi_en_de1)  # place holder for history 
     phi_en_de5 = np.zeros_like(phi_en_de1)  # place holder for incorrect history
     phi_en_de_bias = np.ones_like(phi_en_de1)  # place holder for bias
-    phi_en_de = np.stack([phi_en_de1, phi_en_de2, phi_en_de3, phi_en_de4, phi_en_de5], axis=2)
-    phi_en_de = phi_en_de.astype(DTYPE)
+    T_phi_en_de = np.stack([phi_en_de1, phi_en_de2, phi_en_de3, phi_en_de4, phi_en_de5, phi_en_de_bias], axis=2)
+    T_phi_en_de = T_phi_en_de.astype(DTYPE)
 
-    phi_wrapper = PhiWrapper(phi_en_en, phi_en_de)
+    phi_wrapper = PhiWrapper(T_phi_en_en, T_phi_en_en_w1, T_phi_en_de)
+
     t_now = '-'.join(ctime().split())
     model_param_writer_name = options.training_instances + '.cpu' + str(cpu_count) + '.' + t_now + '.params'
     intermediate_writer = open(model_param_writer_name + '.tmp', 'w')

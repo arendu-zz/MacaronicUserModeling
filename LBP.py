@@ -22,6 +22,7 @@ class FactorGraph():
                  theta_en_de_names,
                  theta_en_en,
                  theta_en_de,
+                 phi_en_en_w1,
                  phi_en_en,
                  phi_en_de):
         self.theta_en_en = theta_en_en
@@ -29,8 +30,10 @@ class FactorGraph():
         self.theta_en_en_names = theta_en_en_names,
         self.theta_en_de_names = theta_en_de_names,
         self.phi_en_en = phi_en_en
+        self.phi_en_en_w1 = phi_en_en_w1
         self.phi_en_de = phi_en_de
         self.pot_en_en = None
+        self.pot_en_en_w1 = None
         self.pot_en_de = None
         self.variables = {}
         self.factors = []
@@ -452,51 +455,29 @@ class FactorNode():
 
     def get_pot(self):
         if self.factor_type == 'en_en':
-            #if self.gap > 1:
-            #    return self.graph.pot_en_en
-            #elif self.gap == 1:
-            #    return self.graph.pot_en_en_w1
-            #else:
-            #    raise BaseException("only 2 kinds of distances are supported ...")
-            #print self.graph.pot_en_en
-            return self.graph.pot_en_en
+            if self.gap > 1:
+                return self.graph.pot_en_en
+            elif self.gap == 1:
+                return self.graph.pot_en_en_w1
+            else:
+                raise BaseException("only 2 kinds of distances are supported ...")
         elif self.factor_type == 'en_de':
             return self.graph.pot_en_de
         else:
             raise BaseException("only two kinds of potentials are supported...")
 
-    '''
-    def get_theta(self):
-        if self.factor_type == 'en_en':
-            return self.graph.theta_en_en
-        elif self.factor_type == 'en_de':
-            return self.graph.theta_en_de
-        else:
-            raise BaseException("only 2 factor types are supported right now..")
-    '''
-
     def get_phi(self):
         if self.factor_type == 'en_en':
-            #if self.gap > 1:
-            #    return self.graph.phi_en_en
-            #elif self.gap == 1:
-            #    return self.graph.phi_en_en_w1
-            #else:
-            #    raise BaseException("only 2 distances supported at the moment")
-            return self.graph.phi_en_en
+            if self.gap > 1:
+                return self.graph.phi_en_en
+            elif self.gap == 1:
+                return self.graph.phi_en_en_w1
+            else:
+                raise BaseException("only 2 distances supported at the moment")
         elif self.factor_type == 'en_de':
             return self.graph.phi_en_de
         else:
             raise BaseException("only 2 feature value types are supported right now..")
-
-    '''def get_phi_csc(self):
-        if self.factor_type == 'en_en':
-            return self.graph.phi_en_en_csc
-        elif self.factor_type == 'en_de':
-            return self.graph.phi_en_de_csc
-        else:
-            raise BaseException("only 2 feature value types are supported right now..")
-    '''
 
     def get_shape(self):
         if len(self.varset) == 1:
@@ -749,8 +730,9 @@ def pointwise_multiply(m1, m2):
     return Message(new_m)
 
 class PhiWrapper:
-    def __init__(self, phi_en_en, phi_en_de):
+    def __init__(self, phi_en_en, phi_en_en_w1, phi_en_de):
         self.phi_en_en = phi_en_en
+        self.phi_en_en_w1 = phi_en_en_w1
         self.phi_en_de = phi_en_de
 
 
