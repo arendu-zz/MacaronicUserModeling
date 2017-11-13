@@ -1,16 +1,12 @@
+#!/usr/bin/env python 
 __author__ = 'arenduchintala'
 import sys
 import codecs
 from optparse import OptionParser
-import json
-import gensim
-from gensim.models.word2vec import Word2Vec
 import numpy as np
+#from gensim.models.word2vec import Word2Vec
 from scipy.stats.stats import pearsonr, spearmanr
 from matplotlib import pyplot as plt
-import matplotlib
-import matplotlib.colors as col
-import scipy
 from matplotlib.colors import LogNorm
 from matplotlib import colors
 import random
@@ -53,7 +49,7 @@ def get_vec(model, word):
     except KeyError:
         sys.stderr.write('no vec for ' + word + ' using <unk> \n')
         vec = model['__unk__']
-        #vec = np.random.rand(50)
+        vec = np.random.rand(50)
         #vec = rare.copy()
     return vec
 
@@ -75,28 +71,11 @@ if __name__ == '__main__':
     else:
         pass
 
-    # w2v_model = Word2Vec.load(options.word2vec_model)
+    dist_lines = codecs.open(options.dist_file, 'r', 'utf8').readlines()
+    #w2v_model = Word2Vec.load(options.word2vec_model)
     w2v_model = dict(
         (items.split()[0].strip(), np.array([float(n) for n in items.split()[1:]])) for items in
         open(options.glove_file).readlines())
-    dist_lines = codecs.open(options.dist_file, 'r', 'utf8').readlines()
-    rare_model = dict(
-        (items.split()[0].strip(), np.array([float(n) for n in items.split()[1:]])) for items in
-        open(options.glove_file).readlines())
-    rare = np.zeros((50,))
-    for rw, rv in rare_model.iteritems():
-        rare += rv 
-    r =  np.random.rand(50)
-    rare =r- np.mean(r)
-    w2v_model['__unk__'] = rare
-    _writer = codecs.open('/Users/arenduchintala/Projects/resources/glove.6B.50d.unk.txt', 'w', 'utf8')
-    for w,v in w2v_model.iteritems():
-        _s = ' '.join(['%0.4f' % _i for _i in v])
-        _writer.write(w.strip() + ' ' +  _s + '\n')
-    _writer.flush()
-    _writer.close()
-    exit(1)
-
     vocabs = [v.strip() for v in codecs.open(options.vocab_file, 'r', 'utf8').readlines()]
     vocab2id = dict((v, idx) for idx, v in enumerate(vocabs))
     id2vector = dict((idx, get_vec(w2v_model, v)) for idx, v in enumerate(vocabs))

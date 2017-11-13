@@ -1,0 +1,5 @@
+#!/bin/sh
+set -e
+PROJECT_HOME='/home/arenduc1/Projects/MacaronicUserModeling' #Replace this with the current folder
+TI_DIR='/home/arenduc1/export/macaronic-feature-extraction/training-instances' #folder for training-instances
+FEATS_DIR='/home/arenduc1/export/macaronic-feature-extraction/featsb07' #folder for features 

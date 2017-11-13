@@ -1,0 +1,8 @@
+1. git clone https://github.com/arendu/MacaronicUserModeling.git 
+2. cd MacaronicUserModeling/array_utils and run build.sh
+3. Download data and features are available here: https://drive.google.com/drive/folders/1Qi6y8YZI04L53IihCz9_gCpG14p17-XF?usp=sharing
+4. Change MacaronicUserModeling/config.src file, PROJECT_HOME should point to the code folder, TI_DIR should point to the unzipped data.zip folder, FEATS_DIR should point to the unzipped features.zip folder
+5. modify MacaronicUserModeling/run-training.sh and MacaronicUserModeling/run-predictions.sh to source the config.src file.
+6. run MacaronicUserModeling/run-training.sh
+7. modify PARAM_ITER in MacaronicUserModeling/run-predictions.sh if needed (defaults to iter3)
+8. run eval.py, get_acc.py and get_corr.py (requires glove word embeddings)
